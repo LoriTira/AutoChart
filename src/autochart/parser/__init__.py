@@ -1,7 +1,8 @@
 """AutoChart input parsers.
 
-Provides parse_workbook() to automatically detect and parse all INPUT sheets
-from an Excel workbook, returning structured data grouped by chart set type.
+Provides :func:`parse_workbook` to detect and parse all INPUT sheets from an
+Excel workbook, and :func:`auto_parse` for zero-config usage that auto-detects
+configuration metadata from the workbook before parsing.
 """
 
 from pathlib import Path
@@ -90,3 +91,32 @@ def get_all_data_by_type(
             else:
                 by_type[chart_type].append(data)
     return by_type
+
+
+def auto_parse(
+    path: Union[str, Path],
+    config_overrides: dict | None = None,
+    sheet_prefix: str = "INPUT",
+) -> tuple[ChartConfig, dict[ChartSetType, list]]:
+    """Auto-detect config from input workbook and parse all sheets.
+
+    Extracts metadata (disease, years, rate, source, geography, demographics)
+    from the workbook automatically, merges with any user overrides, then
+    parses all INPUT sheets.
+
+    Args:
+        path: Path to the input .xlsx workbook.
+        config_overrides: Optional dict of user-specified config values
+            that override auto-detected values. Keys match ChartConfig field names.
+        sheet_prefix: Prefix to filter sheets (default: "INPUT").
+
+    Returns:
+        Tuple of (auto-built ChartConfig, dict mapping ChartSetType to data lists).
+    """
+    from autochart.extractor import extract_config, build_config
+
+    extracted = extract_config(path)
+    config = build_config(extracted, config_overrides)
+    results = parse_workbook(path, config, sheet_prefix)
+    by_type = get_all_data_by_type(results)
+    return config, by_type

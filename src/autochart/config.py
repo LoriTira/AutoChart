@@ -12,6 +12,17 @@ class ChartSetType(Enum):
     C = "C"       # All races combined comparison
     PART_3 = "PART_3"  # Gender x Race breakdown
 
+    @property
+    def label(self) -> str:
+        """Human-readable label for this chart set type."""
+        _labels = {
+            "A": "Race vs Rest of City",
+            "B": "Race vs Reference Group",
+            "C": "All Races Combined",
+            "PART_3": "Gender x Race Breakdown",
+        }
+        return _labels[self.value]
+
 
 @dataclass
 class ColorScheme:

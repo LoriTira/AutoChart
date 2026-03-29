@@ -10,29 +10,28 @@ Built for public health analysts and epidemiologists who need to batch-generate 
 # Install
 pip install -e ".[dev]"
 
-# Generate charts from the CLI
-autochart generate examples/examples.xlsx \
-  -o output.xlsx \
-  --disease "Cancer Mortality" \
-  --years "2017-2023" \
-  --rate-denominator 100000 \
-  --data-source "DATA SOURCE: Boston resident deaths, Massachusetts Dept of Public Health" \
-  --charts all
+# Zero-config: auto-detects disease, years, rate, source, geography from input
+autochart generate examples/examples.xlsx
 
-# Or use the web UI
+# With overrides
+autochart generate examples/examples.xlsx -o output.xlsx --disease "Cancer Mortality" --years "2017-2023"
+
+# Web UI with visual template picker
 streamlit run webapp/app.py
 ```
+
+AutoChart auto-extracts configuration from your input data (disease name, year range, rate units, data source, geography, demographics). You can override any auto-detected value, or run with zero configuration.
 
 ## What It Does
 
 Given an input Excel workbook with statistical data (rates, p-values, confidence intervals by race/gender), AutoChart generates a formatted output workbook containing:
 
-| Chart Type | Description | Layout |
-|------------|-------------|--------|
-| **Set A** | Race vs Rest of Boston | 3 charts (per race), 3 series x 3 categories = 9 bars each |
-| **Set B** | Race vs White (reference) | 3 charts (per race), 3 bars each |
-| **Set C** | Combined race comparison | 1 chart, 5 bars (all races + Boston Overall) |
-| **Part 3** | Sex- and race-stratified | 1 chart, 2 series x 5 categories = 10 bars |
+| Template | Description | Layout |
+|----------|-------------|--------|
+| **Race vs Rest of City** | Compares each race to the rest of the population | 3 charts (per race), 9 bars each |
+| **Race vs Reference Group** | Compares each race to the reference group (e.g., White) | 3 charts (per race), 3 bars each |
+| **All Races Combined** | All racial groups side by side | 1 chart, 5 bars |
+| **Gender x Race Breakdown** | Sex- and race-stratified | 1 chart, 10 bars (2 x 5) |
 
 Each chart includes:
 - Clustered bar chart with correct colors (green/blue/navy), gap width (219), and overlap (-27)
@@ -47,20 +46,21 @@ Each chart includes:
 ## Architecture
 
 ```
-Input .xlsx ──> Parser ──> Data Models ──> WorkbookBuilder ──> OOXML Post-Process ──> Output .xlsx
-                 │                              │                     │
-           Auto-detects               openpyxl charts          Montserrat fonts
-           SAS / pivoted              + cell formatting        Pattern fills
-           format                                              Asterisk labels
+Input .xlsx ──> Extractor ──> Parser ──> Data Models ──> WorkbookBuilder ──> OOXML Post-Process ──> Output .xlsx
+                   │             │                              │                     │
+              Auto-detects  Auto-detects               openpyxl charts          Montserrat fonts
+              config from   SAS / pivoted              + cell formatting        Pattern fills
+              title cells   format                                              Asterisk labels
 ```
 
 ### Data Flow
 
-1. **Parser** auto-detects input format (SAS statistical output or pivoted grid) and extracts rates, p-values, demographics
-2. **Data models** (dataclasses) provide type-safe containers for each chart type's data
-3. **Chart builders** create openpyxl bar charts with correct structure, colors, and data labels
-4. **Text generator** produces template-based descriptive text and footnotes
-5. **OOXML post-processor** patches the saved `.xlsx` ZIP to add features openpyxl can't: Montserrat fonts, diagonal stripe pattern fills, rich-text asterisk data labels
+1. **Extractor** scans input title cells for metadata (disease, years, rate, source, geography, demographics)
+2. **Parser** auto-detects input format (SAS statistical output or pivoted grid) and extracts rates, p-values
+3. **Template registry** matches parsed data to available chart templates with SVG previews
+4. **Chart builders** create openpyxl bar charts with correct structure, colors, and data labels
+5. **Text generator** produces template-based descriptive text and footnotes
+6. **OOXML post-processor** patches the saved `.xlsx` ZIP to add Montserrat fonts, diagonal stripe pattern fills, and rich-text asterisk data labels
 
 ### Why Two-Stage Chart Generation?
 
@@ -84,10 +84,12 @@ AutoChart/
 ├── src/autochart/
 │   ├── __init__.py                   # Version: 0.1.0
 │   ├── config.py                     # Data models & configuration (ChartConfig, RateComparison, etc.)
-│   ├── cli.py                        # CLI: `autochart generate ...`
+│   ├── cli.py                        # CLI: `autochart generate ...` (zero-config or with overrides)
+│   ├── extractor.py                  # Auto-extract config from input data (disease, years, rate, etc.)
+│   ├── templates.py                  # Template registry with SVG previews and metadata
 │   │
 │   ├── parser/
-│   │   ├── __init__.py               # parse_workbook(), get_all_data_by_type()
+│   │   ├── __init__.py               # parse_workbook(), auto_parse(), get_all_data_by_type()
 │   │   ├── base.py                   # BaseParser abstract class
 │   │   ├── pivoted.py                # PivotedParser: pre-arranged 3x3 grid (INPUT-1, INPUT-5 style)
 │   │   └── sas_output.py             # SASOutputParser: raw statistical output (INPUT-2-4, INPUT-6-8)
@@ -95,10 +97,10 @@ AutoChart/
 │   ├── charts/
 │   │   ├── __init__.py
 │   │   ├── ooxml.py                  # Low-level OOXML XML builders (pattern fills, asterisks, multi-level axes)
-│   │   ├── chart_set_a.py            # Race vs Rest of Boston (3 charts, 9 bars each)
-│   │   ├── chart_set_b.py            # Race vs White reference (3 charts, 3 bars each)
-│   │   ├── chart_set_c.py            # Combined race comparison (1 chart, 5 bars)
-│   │   └── part_3.py                 # Sex- and race-stratified (1 chart, 10 bars)
+│   │   ├── chart_set_a.py            # Race vs Rest of City (3 charts, 9 bars each)
+│   │   ├── chart_set_b.py            # Race vs Reference Group (3 charts, 3 bars each)
+│   │   ├── chart_set_c.py            # All Races Combined (1 chart, 5 bars)
+│   │   └── part_3.py                 # Gender x Race Breakdown (1 chart, 10 bars)
 │   │
 │   ├── text/
 │   │   ├── __init__.py
@@ -111,25 +113,87 @@ AutoChart/
 │       └── postprocess.py            # OOXML post-processor (fonts, pattern fills, asterisks)
 │
 ├── webapp/
-│   └── app.py                        # Streamlit web UI
+│   └── app.py                        # Streamlit web UI with visual template picker
 │
-└── tests/                            # 326 tests
+└── tests/                            # 369 tests
     ├── test_config.py                #  22 tests - data models
-    ├── test_parser.py                #  65 tests - both parsers, all 8 INPUT sheets
+    ├── test_extractor.py             #  13 tests - auto-extraction from input data
+    ├── test_templates.py             #  17 tests - template registry, SVG previews
+    ├── test_parser.py                #  70 tests - both parsers, auto_parse, all 8 INPUT sheets
     ├── test_text.py                  #  37 tests - text generation
     ├── test_ooxml.py                 #  28 tests - XML element builders
     ├── test_builder.py               #  27 tests - workbook assembly, cell styling
-    ├── test_chart_set_a.py           #  25 tests - Chart Set A
-    ├── test_chart_set_b.py           #  24 tests - Chart Set B
-    ├── test_chart_set_c.py           #  21 tests - Chart Set C
-    ├── test_part_3.py                #  21 tests - Part 3
+    ├── test_chart_set_a.py           #  25 tests - Race vs Rest of City
+    ├── test_chart_set_b.py           #  24 tests - Race vs Reference Group
+    ├── test_chart_set_c.py           #  21 tests - All Races Combined
+    ├── test_part_3.py                #  21 tests - Gender x Race Breakdown
     ├── test_postprocess.py           #  25 tests - OOXML patching
-    └── test_cli.py                   #  31 tests - CLI args, end-to-end
+    └── test_cli.py                   #  39 tests - CLI args, zero-config, end-to-end
 ```
 
 ---
 
 ## Key Modules Reference
+
+### `extractor.py` — Auto-Extraction
+
+Scans input workbook title cells for metadata using regex patterns:
+
+```python
+from autochart.extractor import extract_config, build_config
+
+extracted = extract_config("input.xlsx")
+# ExtractedConfig(disease_name="Cancer Mortality", years="2018-2024",
+#                 rate_unit="per 100,000 residents", rate_denominator=100000,
+#                 data_source="DATA SOURCE: ...", geography="Boston",
+#                 demographics=["Asian", "Black", "Latinx", "White"],
+#                 confidence={"disease_name": 0.9, "years": 0.95, ...})
+
+# Merge with user overrides (overrides win)
+config = build_config(extracted, overrides={"disease_name": "Custom Name"})
+```
+
+| Field | Source | Confidence |
+|-------|--------|------------|
+| Disease name | Keywords (Mortality, Hospitalizations, etc.) in title cells | 0.9 |
+| Years | Regex `\d{4}-\d{4}` in title cells | 0.95 |
+| Rate unit / denominator | "per N" pattern in title cells | 0.9 |
+| Data source | "DATA SOURCE:" text | 0.95 |
+| Geography | City name in titles | 0.8 |
+| Demographics | Race labels from column headers | 0.9 |
+
+### `templates.py` — Template Registry
+
+Each chart type is registered with rich metadata and an inline SVG preview:
+
+```python
+from autochart.templates import get_all_templates, get_templates_for_data
+
+# List all templates
+for t in get_all_templates():
+    print(f"{t.id}: {t.name} — {t.description}")
+    # "race_vs_rest: Race vs Rest of City — Compares each racial/ethnic group's rate..."
+
+# Match templates to parsed data
+for template, has_data in get_templates_for_data(by_type):
+    print(f"{template.name}: {'available' if has_data else 'no data'}")
+```
+
+Templates carry SVG previews (`template.preview_svg`) showing miniature bar charts with actual colors, displayable in Streamlit via `st.markdown(svg, unsafe_allow_html=True)`.
+
+### `parser/auto_parse()` — Zero-Config Parsing
+
+Combines extraction + parsing in one call:
+
+```python
+from autochart.parser import auto_parse
+
+# Zero-config: extracts everything automatically
+config, by_type = auto_parse("input.xlsx")
+
+# With overrides
+config, by_type = auto_parse("input.xlsx", config_overrides={"disease_name": "Custom"})
+```
 
 ### `config.py` — Data Models
 
@@ -240,18 +304,37 @@ autochart generate INPUT_FILE [options]
 
 Required:
   INPUT_FILE               Path to input .xlsx file
-  --disease TEXT            Disease/condition name (e.g., "Cancer Mortality")
-  --years TEXT              Year range (e.g., "2017-2023")
+
+Auto-detected (override with flags):
+  --disease TEXT            Disease/condition name (auto-detected from titles)
+  --years TEXT              Year range (auto-detected from titles)
+  --rate-unit TEXT          Rate unit (auto-detected from titles)
+  --rate-denominator INT   Rate denominator (auto-detected from titles)
+  --data-source TEXT       Data source (auto-detected from "DATA SOURCE:" text)
 
 Optional:
   -o, --output PATH        Output file (default: output.xlsx)
   --charts TYPES           Comma-separated: a,b,c,part3,all (default: all)
-  --rate-unit TEXT          Rate unit (default: "per 100,000 residents")
-  --rate-denominator INT   Rate denominator (default: 100000)
-  --data-source TEXT       Data source attribution
-  --geography TEXT         Geography name (default: "Boston")
+  --geography TEXT         Geography name (default: auto-detected or "Boston")
   --reference-group TEXT   Reference demographic (default: "White")
-  --demographics TEXT      Comma-separated demographics (default: "Asian,Black,Latinx,White")
+  --demographics TEXT      Comma-separated demographics (default: auto-detected)
+  --no-auto                Disable auto-detection (requires --disease and --years)
+```
+
+### Examples
+
+```bash
+# Zero-config: auto-detects everything
+autochart generate data.xlsx
+
+# Override just the disease name
+autochart generate data.xlsx --disease "Lung Cancer Mortality"
+
+# Full manual mode (backward compatible)
+autochart generate data.xlsx --no-auto --disease "Cancer Mortality" --years "2017-2023"
+
+# Specific chart types only
+autochart generate data.xlsx --charts b,c -o comparison_charts.xlsx
 ```
 
 ---
@@ -341,11 +424,14 @@ Female Asian         | ...
 
 1. Create `src/autochart/charts/new_type.py` with a `build_new_type_sheet(ws, data, config)` function
 2. Add a data class to `config.py` (e.g., `NewTypeData`)
-3. Add enum value to `ChartSetType`
-4. Add parser logic to `sas_output.py` or create a new parser
-5. Add `add_new_type()` method to `WorkbookBuilder`
-6. Add chart patch logic to `_compute_chart_patches()` in `cli.py`
-7. Add tests
+3. Add enum value to `ChartSetType` (with human-readable `label` in the `label` property)
+4. Register in `templates.py`: call `_register(ChartTemplate(...))` with name, description, SVG preview, and builder function
+5. Add parser logic to `sas_output.py` or create a new parser
+6. Add `add_new_type()` method to `WorkbookBuilder`
+7. Add chart patch logic to `_compute_chart_patches()` in `cli.py`
+8. Add tests
+
+The template registry makes the new chart type automatically appear in the Streamlit visual picker and CLI help.
 
 ### Adding a New Input Format
 
@@ -387,8 +473,9 @@ To add a new OOXML feature:
 - **Text boxes**: Descriptive text and footnotes are written as cell text, not floating text box shapes (the original examples use `<xdr:sp>` shapes). The text content is all present and correct.
 - **Multi-level axis**: Part 3 charts use a flat category axis. The multi-level gender x race axis (`<c:multiLvlStrRef>`) is built in `ooxml.py` but not yet wired into post-processing.
 - **Single workbook input**: Batch mode processes one input file. Multi-file processing requires separate CLI runs.
+- **Auto-extraction coverage**: Disease name and year extraction relies on keyword matching in title cells. Uncommon disease names or non-standard title formats may not be detected (user can always override).
 
-## Phase 2 Roadmap (Future)
+## Roadmap (Future)
 
 - [ ] Floating text box injection via OOXML drawing shapes
 - [ ] Multi-level category axis post-processing for Part 3
@@ -396,6 +483,7 @@ To add a new OOXML feature:
 - [ ] Multi-file batch processing
 - [ ] Additional chart types and layouts
 - [ ] Color scheme presets
+- [ ] Plugin-based template discovery via entry points
 
 ---
 
@@ -405,7 +493,7 @@ To add a new OOXML feature:
 # Install in dev mode
 pip install -e ".[dev]"
 
-# Run all 326 tests
+# Run all 369 tests
 pytest tests/ -v
 
 # Run specific test module

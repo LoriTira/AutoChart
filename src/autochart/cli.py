@@ -1,14 +1,12 @@
 """Command-line interface for AutoChart.
 
-Usage::
+Usage (zero-config -- auto-detects everything)::
 
-    autochart generate input.xlsx -o output.xlsx \\
-        --disease "Cancer Mortality" \\
-        --rate-unit "per 100,000 residents" \\
-        --rate-denominator 100000 \\
-        --data-source "DATA SOURCE: ..." \\
-        --years "2017-2023" \\
-        --charts all
+    autochart generate input.xlsx
+
+Usage (with overrides)::
+
+    autochart generate input.xlsx -o output.xlsx --disease "Cancer Mortality" --years "2017-2023"
 """
 
 from __future__ import annotations
@@ -60,32 +58,32 @@ def build_parser() -> argparse.ArgumentParser:
     gen.add_argument(
         "--disease",
         type=str,
-        required=True,
-        help="Disease name (e.g. 'Cancer Mortality')",
+        default=None,
+        help="Disease name (auto-detected if omitted)",
     )
     gen.add_argument(
         "--rate-unit",
         type=str,
-        default="per 100,000 residents",
-        help="Rate unit string (default: 'per 100,000 residents')",
+        default=None,
+        help="Rate unit string (auto-detected if omitted)",
     )
     gen.add_argument(
         "--rate-denominator",
         type=int,
-        default=100000,
-        help="Rate denominator integer (default: 100000)",
+        default=None,
+        help="Rate denominator (auto-detected if omitted)",
     )
     gen.add_argument(
         "--data-source",
         type=str,
-        default="",
-        help="Data source text",
+        default=None,
+        help="Data source text (auto-detected if omitted)",
     )
     gen.add_argument(
         "--years",
         type=str,
-        required=True,
-        help="Years range string (e.g. '2017-2023')",
+        default=None,
+        help="Years range (auto-detected if omitted)",
     )
     gen.add_argument(
         "--charts",
@@ -110,6 +108,12 @@ def build_parser() -> argparse.ArgumentParser:
         type=str,
         default="Asian,Black,Latinx,White",
         help="Comma-separated demographics list (default: 'Asian,Black,Latinx,White')",
+    )
+    gen.add_argument(
+        "--no-auto",
+        action="store_true",
+        default=False,
+        help="Disable auto-detection of config from input file",
     )
 
     return parser
@@ -337,9 +341,6 @@ def _run_generate(args: argparse.Namespace) -> None:
         print(f"Error: Input file must be .xlsx: {input_path}", file=sys.stderr)
         sys.exit(1)
 
-    # Parse demographics
-    demographics = [d.strip() for d in args.demographics.split(",")]
-
     # Parse chart types
     try:
         requested_types = _parse_chart_types(args.charts)
@@ -347,31 +348,79 @@ def _run_generate(args: argparse.Namespace) -> None:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    # Build config
-    config = ChartConfig(
-        disease_name=args.disease,
-        rate_unit=args.rate_unit,
-        rate_denominator=args.rate_denominator,
-        data_source=args.data_source,
-        years=args.years,
-        demographics=demographics,
-        reference_group=args.reference_group,
-        geography=args.geography,
-    )
+    # Decide: auto-extraction or manual config
+    use_auto = not args.no_auto
 
-    # Parse input workbook
+    if use_auto:
+        # Build overrides dict from provided CLI args (only non-None values)
+        overrides = {}
+        if args.disease is not None:
+            overrides["disease_name"] = args.disease
+        if args.years is not None:
+            overrides["years"] = args.years
+        if args.rate_unit is not None:
+            overrides["rate_unit"] = args.rate_unit
+        if args.rate_denominator is not None:
+            overrides["rate_denominator"] = args.rate_denominator
+        if args.data_source is not None:
+            overrides["data_source"] = args.data_source
+        if args.geography != "Boston":  # only override if user changed it
+            overrides["geography"] = args.geography
+        if args.reference_group != "White":
+            overrides["reference_group"] = args.reference_group
+        if args.demographics != "Asian,Black,Latinx,White":
+            overrides["demographics"] = [d.strip() for d in args.demographics.split(",")]
+
+        try:
+            from autochart.parser import auto_parse
+            config, by_type = auto_parse(str(input_path), overrides)
+        except ValueError as e:
+            print(f"Error: {e}", file=sys.stderr)
+            sys.exit(1)
+
+        # Print what was auto-detected
+        print(f"Auto-detected configuration:")
+        print(f"  Disease: {config.disease_name}")
+        print(f"  Years: {config.years}")
+        print(f"  Rate: {config.rate_unit}")
+        if config.data_source:
+            print(f"  Data source: {config.data_source[:60]}...")
+        print(f"  Geography: {config.geography}")
+        print(f"  Demographics: {', '.join(config.demographics)}")
+        print()
+
+    else:
+        # Manual mode -- require disease and years
+        if args.disease is None:
+            print("Error: --disease is required when using --no-auto", file=sys.stderr)
+            sys.exit(1)
+        if args.years is None:
+            print("Error: --years is required when using --no-auto", file=sys.stderr)
+            sys.exit(1)
+
+        demographics = [d.strip() for d in args.demographics.split(",")]
+        config = ChartConfig(
+            disease_name=args.disease,
+            rate_unit=args.rate_unit or "per 100,000 residents",
+            rate_denominator=args.rate_denominator or 100000,
+            data_source=args.data_source or "",
+            years=args.years,
+            demographics=demographics,
+            reference_group=args.reference_group,
+            geography=args.geography,
+        )
+
+        # Parse workbook
+        parsed = parse_workbook(str(input_path), config)
+        if not parsed:
+            print("Error: No INPUT sheets found or no data could be parsed.", file=sys.stderr)
+            sys.exit(1)
+        by_type = get_all_data_by_type(parsed)
+
+    # From here: same as before (build workbook, patches, save)
     print(f"Parsing input file: {input_path}")
-    parsed = parse_workbook(str(input_path), config)
-    if not parsed:
-        print("Error: No INPUT sheets found or no data could be parsed.", file=sys.stderr)
-        sys.exit(1)
-
-    print(f"  Found {len(parsed)} input sheet(s): {', '.join(parsed.keys())}")
-
-    # Group data by chart type
-    by_type = get_all_data_by_type(parsed)
     available_types = list(by_type.keys())
-    print(f"  Available chart types: {', '.join(t.value for t in available_types)}")
+    print(f"  Available chart types: {', '.join(t.label for t in available_types)}")
 
     # Build workbook
     builder = WorkbookBuilder(config)
@@ -379,42 +428,31 @@ def _run_generate(args: argparse.Namespace) -> None:
 
     for chart_type in requested_types:
         if chart_type not in by_type:
-            print(f"  Warning: No data for chart type {chart_type.value}, skipping.")
             continue
-
         if chart_type == ChartSetType.A:
             builder.add_chart_set_a(by_type[chart_type])
-            count = len(by_type[chart_type])
-            charts_generated.append(f"Chart Set A ({count} chart(s))")
-
+            charts_generated.append(f"{chart_type.label} ({len(by_type[chart_type])} chart(s))")
         elif chart_type == ChartSetType.B:
             builder.add_chart_set_b(by_type[chart_type])
-            count = len(by_type[chart_type])
-            charts_generated.append(f"Chart Set B ({count} chart(s))")
-
+            charts_generated.append(f"{chart_type.label} ({len(by_type[chart_type])} chart(s))")
         elif chart_type == ChartSetType.C:
             for c_data in by_type[chart_type]:
                 builder.add_chart_set_c(c_data)
-            charts_generated.append("Chart Set C (1 chart)")
-
+            charts_generated.append(f"{chart_type.label} (1 chart)")
         elif chart_type == ChartSetType.PART_3:
             for p3_data in by_type[chart_type]:
                 builder.add_part_3(p3_data)
-            charts_generated.append("Part 3 (1 chart)")
+            charts_generated.append(f"{chart_type.label} (1 chart)")
 
     if not charts_generated:
         print("Error: No charts could be generated.", file=sys.stderr)
         sys.exit(1)
 
-    # Compute chart patches for post-processing
     chart_patches = _compute_chart_patches(by_type, requested_types, config)
-
-    # Save with post-processing
     output_path = args.output
     print(f"Saving output to: {output_path}")
     builder.save_with_postprocess(output_path, chart_patches)
 
-    # Summary
     print("\nGeneration complete!")
     print(f"  Disease: {config.disease_name}")
     print(f"  Years: {config.years}")

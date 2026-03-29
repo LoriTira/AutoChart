@@ -14,7 +14,7 @@ from autochart.config import (
     Part3Data,
     RateComparison,
 )
-from autochart.parser import parse_workbook, get_all_data_by_type
+from autochart.parser import parse_workbook, get_all_data_by_type, auto_parse
 from autochart.parser.pivoted import PivotedParser
 from autochart.parser.sas_output import SASOutputParser, _parse_p_value, _parse_ci
 
@@ -543,3 +543,57 @@ class TestParseWorkbook:
         assert ChartSetType.B in by_type
         assert ChartSetType.C in by_type
         assert ChartSetType.PART_3 in by_type
+
+
+# ------------------------------------------------------------------
+# auto_parse tests
+# ------------------------------------------------------------------
+
+
+class TestAutoParse:
+    """Tests for the auto_parse convenience function."""
+
+    def test_auto_parse_returns_tuple(self):
+        """auto_parse returns a (ChartConfig, dict) tuple."""
+        config, by_type = auto_parse(EXAMPLES_PATH)
+        assert isinstance(config, ChartConfig)
+        assert isinstance(by_type, dict)
+
+    def test_auto_parse_config_has_disease(self):
+        """Auto-detected config should contain a disease name."""
+        config, _ = auto_parse(EXAMPLES_PATH)
+        assert config.disease_name is not None
+        assert len(config.disease_name) > 0
+
+    def test_auto_parse_config_has_years(self):
+        """Auto-detected config should contain a year range."""
+        config, _ = auto_parse(EXAMPLES_PATH)
+        assert config.years is not None
+        assert "-" in config.years  # e.g. "2018-2024"
+
+    def test_auto_parse_with_overrides(self):
+        """Config overrides should be applied over auto-detected values."""
+        overrides = {
+            "disease_name": "Custom Disease",
+            "years": "2020-2025",
+        }
+        config, by_type = auto_parse(EXAMPLES_PATH, config_overrides=overrides)
+        assert config.disease_name == "Custom Disease"
+        assert config.years == "2020-2025"
+        # Should still have data
+        assert len(by_type) > 0
+
+    def test_auto_parse_data_matches_manual(self):
+        """auto_parse should produce the same data as parse_workbook + get_all_data_by_type."""
+        config, by_type_auto = auto_parse(EXAMPLES_PATH)
+
+        # Manually parse with the same config
+        manual_results = parse_workbook(EXAMPLES_PATH, config)
+        by_type_manual = get_all_data_by_type(manual_results)
+
+        # Same chart types present
+        assert set(by_type_auto.keys()) == set(by_type_manual.keys())
+
+        # Same number of data items per type
+        for ct in by_type_auto:
+            assert len(by_type_auto[ct]) == len(by_type_manual[ct])

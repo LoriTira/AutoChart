@@ -98,13 +98,14 @@ class TestBuildParser:
             "--years", "2020-2024",
         ])
         assert args.output == "output.xlsx"
-        assert args.rate_unit == "per 100,000 residents"
-        assert args.rate_denominator == 100000
-        assert args.data_source == ""
+        assert args.rate_unit is None
+        assert args.rate_denominator is None
+        assert args.data_source is None
         assert args.charts == "all"
         assert args.geography == "Boston"
         assert args.reference_group == "White"
         assert args.demographics == "Asian,Black,Latinx,White"
+        assert args.no_auto is False
 
     def test_all_arguments(self):
         parser = build_parser()
@@ -137,6 +138,30 @@ class TestBuildParser:
         with pytest.raises(SystemExit) as exc_info:
             main([])
         assert exc_info.value.code == 1
+
+    def test_disease_not_required(self):
+        """--disease is optional (default=None) for auto-detection."""
+        parser = build_parser()
+        args = parser.parse_args(["generate", "input.xlsx"])
+        assert args.disease is None
+
+    def test_years_not_required(self):
+        """--years is optional (default=None) for auto-detection."""
+        parser = build_parser()
+        args = parser.parse_args(["generate", "input.xlsx"])
+        assert args.years is None
+
+    def test_no_auto_flag(self):
+        """--no-auto flag is parsed correctly."""
+        parser = build_parser()
+        args = parser.parse_args(["generate", "input.xlsx", "--no-auto"])
+        assert args.no_auto is True
+
+    def test_no_auto_flag_default(self):
+        """--no-auto defaults to False."""
+        parser = build_parser()
+        args = parser.parse_args(["generate", "input.xlsx"])
+        assert args.no_auto is False
 
 
 # ---------------------------------------------------------------------------
@@ -433,7 +458,7 @@ class TestEndToEnd:
 
         assert Path(output_path).exists()
         captured = capsys.readouterr()
-        assert "Chart Set A" in captured.out
+        assert "Race vs Rest of City" in captured.out
 
     def test_missing_input_file_exits(self, capsys):
         """Providing a non-existent input file should exit with error."""
@@ -474,3 +499,78 @@ class TestEndToEnd:
                 "--charts", "invalid_type",
             ])
         assert exc_info.value.code == 1
+
+    @pytest.mark.skipif(
+        not Path(EXAMPLES_PATH).exists(),
+        reason="examples.xlsx not found",
+    )
+    def test_auto_extract_end_to_end(self, output_path, capsys):
+        """Zero-config: generate without --disease/--years using auto-detection."""
+        main([
+            "generate", EXAMPLES_PATH,
+            "-o", output_path,
+        ])
+
+        assert Path(output_path).exists()
+        assert Path(output_path).stat().st_size > 0
+
+        # Verify it's a valid xlsx
+        wb = openpyxl.load_workbook(output_path)
+        assert len(wb.sheetnames) > 0
+        wb.close()
+
+        # Check stdout shows auto-detected config
+        captured = capsys.readouterr()
+        assert "Auto-detected configuration" in captured.out
+        assert "Generation complete" in captured.out
+
+    @pytest.mark.skipif(
+        not Path(EXAMPLES_PATH).exists(),
+        reason="examples.xlsx not found",
+    )
+    def test_override_beats_extraction(self, output_path, capsys):
+        """CLI --disease override should appear in output, beating auto-detection."""
+        main([
+            "generate", EXAMPLES_PATH,
+            "-o", output_path,
+            "--disease", "Custom Disease Name",
+        ])
+
+        captured = capsys.readouterr()
+        assert "Custom Disease Name" in captured.out
+
+    @pytest.mark.skipif(
+        not Path(EXAMPLES_PATH).exists(),
+        reason="examples.xlsx not found",
+    )
+    def test_no_auto_requires_disease(self, output_path, capsys):
+        """--no-auto without --disease should error."""
+        with pytest.raises(SystemExit) as exc_info:
+            main([
+                "generate", EXAMPLES_PATH,
+                "-o", output_path,
+                "--no-auto",
+                "--years", "2018-2024",
+            ])
+        assert exc_info.value.code == 1
+        captured = capsys.readouterr()
+        assert "--disease is required" in captured.err
+
+    @pytest.mark.skipif(
+        not Path(EXAMPLES_PATH).exists(),
+        reason="examples.xlsx not found",
+    )
+    def test_backward_compat(self, output_path, capsys):
+        """Old CLI with --disease and --years still works (backward compat)."""
+        main([
+            "generate", EXAMPLES_PATH,
+            "-o", output_path,
+            "--disease", "Cancer Mortality",
+            "--years", "2018-2024",
+            "--data-source", "DATA SOURCE: Test",
+        ])
+
+        assert Path(output_path).exists()
+        captured = capsys.readouterr()
+        assert "Generation complete" in captured.out
+        assert "Cancer Mortality" in captured.out
