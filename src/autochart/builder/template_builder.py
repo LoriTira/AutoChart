@@ -1,19 +1,18 @@
 """Template-based chart builder.
 
-Opens the template workbook, fills selected sheets with data, deletes
-unused sheets, and saves.  No ZIP surgery needed — openpyxl preserves
-charts when modifying an existing workbook.
+Uses 4 canonical template sheets (one per chart type, no intro text):
+  - OUTPUT-1: Chart Set A    - OUTPUT-6: Chart Set B
+  - OUTPUT-3: Chart Set C    - OUTPUT-4: Part 3
 
-Template consolidation:
-- Chart Set A: 2 layouts (OUTPUT-1 compact, OUTPUT-5 with instructions)
-- Chart Set B: 2 layouts (OUTPUT-6 compact, OUTPUT-2 with instructions)
-- Chart Set C: 1 layout (OUTPUT-3 — OUTPUT-7 is nearly identical)
-- Part 3: 1 layout (OUTPUT-4 — OUTPUT-8 is nearly identical)
+For each disease, opens a fresh template copy and fills only the
+relevant sheets.  Multiple diseases produce multiple output files
+bundled in a ZIP, or a single file if only one disease.
 """
 
 from __future__ import annotations
 
 import io
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -32,42 +31,24 @@ from autochart.config import (
 
 _DEFAULT_TEMPLATE = Path(__file__).resolve().parent.parent / "templates" / "template.xlsx"
 
+TEMPLATE_FOR_TYPE: dict[ChartSetType, str] = {
+    ChartSetType.A: "OUTPUT-1",
+    ChartSetType.B: "OUTPUT-6",
+    ChartSetType.C: "OUTPUT-3",
+    ChartSetType.PART_3: "OUTPUT-4",
+}
 
-# ---------------------------------------------------------------------------
-# Table assignment
-# ---------------------------------------------------------------------------
+# All template sheet names that we use
+_USED_TEMPLATES = set(TEMPLATE_FOR_TYPE.values())
+
 
 @dataclass
 class TableAssignment:
-    """Maps a parsed data table to a template sheet."""
     template_sheet: str
     output_name: str
     chart_type: ChartSetType
     data_list: list[Any]
     config: ChartConfig
-
-
-# ---------------------------------------------------------------------------
-# Template options — consolidated where layouts are nearly identical
-# ---------------------------------------------------------------------------
-
-COMPATIBLE_TEMPLATES: dict[ChartSetType, list[str]] = {
-    ChartSetType.A: ["OUTPUT-1", "OUTPUT-5"],
-    ChartSetType.B: ["OUTPUT-6", "OUTPUT-2"],
-    ChartSetType.C: ["OUTPUT-3", "OUTPUT-7"],
-    ChartSetType.PART_3: ["OUTPUT-4", "OUTPUT-8"],
-}
-
-TEMPLATE_LABELS: dict[str, str] = {
-    "OUTPUT-1": "Compact",
-    "OUTPUT-5": "With instructions",
-    "OUTPUT-6": "Compact",
-    "OUTPUT-2": "With instructions",
-    "OUTPUT-3": "Layout A",
-    "OUTPUT-7": "Layout B",
-    "OUTPUT-4": "Layout A",
-    "OUTPUT-8": "Layout B",
-}
 
 
 # ---------------------------------------------------------------------------
@@ -87,28 +68,6 @@ _CELL_MAPS: dict[str, dict] = {
             {"race_cells": ["B62", "E62", "H62"],
              "data_cells": ["B63", "C63", "D63", "E63", "F63", "G63", "H63", "I63", "J63"],
              "label_cell": "A63", "title_cell": "A65"},
-        ],
-    },
-    "OUTPUT-5": {
-        "type": "set_a",
-        "blocks": [
-            {"race_cells": ["A16", "D16", "G16"],
-             "data_cells": ["A17", "B17", "C17", "D17", "E17", "F17", "G17", "H17", "I17"],
-             "label_cell": None, "title_cell": "A19"},
-            {"race_cells": ["A45", "D45", "G45"],
-             "data_cells": ["A46", "B46", "C46", "D46", "E46", "F46", "G46", "H46", "I46"],
-             "label_cell": None, "title_cell": "A48"},
-            {"race_cells": ["A74", "D74", "G74"],
-             "data_cells": ["A75", "B75", "C75", "D75", "E75", "F75", "G75", "H75", "I75"],
-             "label_cell": None, "title_cell": "A77"},
-        ],
-    },
-    "OUTPUT-2": {
-        "type": "set_b",
-        "blocks": [
-            {"race_cell": "B15", "data_cells": ["B16", "C16", "D16"], "title_cell": "A18"},
-            {"race_cell": "B40", "data_cells": ["B41", "C41", "D41"], "title_cell": "A43"},
-            {"race_cell": "B65", "data_cells": ["B66", "C66", "D66"], "title_cell": "A67"},
         ],
     },
     "OUTPUT-6": {
@@ -131,28 +90,11 @@ _CELL_MAPS: dict[str, dict] = {
         "data_cells": ["B5", "C5", "D5", "E5", "F5", "G5", "H5", "I5", "J5", "K5"],
         "title_cell": "B8",
     },
-    "OUTPUT-7": {
-        "type": "set_c",
-        "header_cells": ["A12", "B12", "C12", "D12", "E12"],
-        "data_cells": ["A13", "B13", "C13", "D13", "E13"],
-        "title_cell": "A15",
-    },
-    "OUTPUT-8": {
-        "type": "part3",
-        "race_cells": ["B6", "C6", "D6", "G6", "H6", "I6"],
-        "data_cells": ["B7", "C7", "D7", "E7", "F7", "G7", "H7", "I7", "J7", "K7"],
-        "title_cell": "B10",
-    },
 }
 
 
-# ---------------------------------------------------------------------------
-# Fill functions
-# ---------------------------------------------------------------------------
-
 def _fill_sheet(ws, template_name: str, chart_type: ChartSetType,
                 data_list: list, config: ChartConfig):
-    """Fill a template sheet with data."""
     cm = _CELL_MAPS[template_name]
 
     if cm["type"] == "set_a":
@@ -223,91 +165,68 @@ def _fill_sheet(ws, template_name: str, chart_type: ChartSetType,
 # ---------------------------------------------------------------------------
 
 class TemplateBuilder:
-    """Build output by filling template sheets in place."""
-
     def __init__(self, template_path: str | Path | None = None):
         if template_path is None:
             template_path = _DEFAULT_TEMPLATE
         self.template_bytes = Path(template_path).read_bytes()
 
-    def build(self, assignments: list[TableAssignment]) -> bytes:
-        """Fill template sheets and return the output workbook bytes.
+    def build_disease(
+        self,
+        disease_name: str,
+        tables: dict[ChartSetType, tuple[ChartConfig, list]],
+    ) -> bytes:
+        """Build one output workbook for a single disease.
 
-        Each assignment uses a different template sheet. If two assignments
-        need the same template sheet, raises ValueError (user should pick
-        different layouts).
+        Opens a fresh template, fills only the relevant OUTPUT sheets,
+        deletes all others (INPUT sheets + unused OUTPUT sheets), and saves.
+        Charts are preserved because we modify the workbook in place.
         """
-        # Validate no duplicate template sheets
-        used = {}
-        for asn in assignments:
-            if asn.template_sheet in used:
-                raise ValueError(
-                    f"Template '{asn.template_sheet}' is used by both "
-                    f"'{used[asn.template_sheet]}' and '{asn.output_name}'. "
-                    f"Please pick a different layout for one of them."
-                )
-            used[asn.template_sheet] = asn.output_name
-
         wb = openpyxl.load_workbook(io.BytesIO(self.template_bytes))
 
-        # Fill assigned sheets
-        filled_sheets: set[str] = set()
-        for asn in assignments:
-            ws = wb[asn.template_sheet]
-            _fill_sheet(ws, asn.template_sheet, asn.chart_type, asn.data_list, asn.config)
-            filled_sheets.add(asn.template_sheet)
+        filled: set[str] = set()
+        for ct, (config, data_list) in tables.items():
+            template_sheet = TEMPLATE_FOR_TYPE[ct]
+            if template_sheet not in wb.sheetnames:
+                continue
+            ws = wb[template_sheet]
+            _fill_sheet(ws, template_sheet, ct, data_list, config)
+            filled.add(template_sheet)
 
-        # Delete all non-assigned sheets (INPUT sheets + unused OUTPUT sheets)
+        # Delete all sheets we didn't fill
         for name in list(wb.sheetnames):
-            if name not in filled_sheets:
+            if name not in filled:
                 del wb[name]
 
         buf = io.BytesIO()
         wb.save(buf)
         return buf.getvalue()
 
-    def build_auto(self, sheet_results: list, requested_types: list[ChartSetType] | None = None) -> bytes:
-        """Auto-assign templates and build (for CLI)."""
+    def build_multi(
+        self,
+        disease_tables: dict[str, dict[ChartSetType, tuple[ChartConfig, list]]],
+    ) -> dict[str, bytes]:
+        """Build one output file per disease. Returns {disease_name: xlsx_bytes}."""
+        results = {}
+        for disease_name, tables in disease_tables.items():
+            results[disease_name] = self.build_disease(disease_name, tables)
+        return results
+
+    def build_auto(self, sheet_results: list, requested_types: list[ChartSetType] | None = None) -> dict[str, bytes]:
+        """Auto-build from parsed sheet results. Returns {disease_name: xlsx_bytes}."""
         if requested_types is None:
             requested_types = list(ChartSetType)
-        assignments = auto_assign_templates(sheet_results, requested_types)
-        return self.build(assignments)
 
+        # Group by disease
+        disease_tables: dict[str, dict[ChartSetType, tuple[Any, list]]] = {}
+        for sr in sheet_results:
+            d = sr.config.disease_name
+            if d not in disease_tables:
+                disease_tables[d] = {}
+            for ct, data_list in sr.by_type.items():
+                if ct not in requested_types:
+                    continue
+                if ct not in disease_tables[d]:
+                    disease_tables[d][ct] = (sr.config, [])
+                disease_tables[d][ct][1].extend(data_list)
 
-def auto_assign_templates(
-    sheet_results: list,
-    requested_types: list[ChartSetType],
-) -> list[TableAssignment]:
-    """Auto-assign templates, alternating between compatible options."""
-    # Aggregate by (disease, chart_type)
-    disease_data: dict[tuple[str, ChartSetType], tuple[Any, list]] = {}
-    for sr in sheet_results:
-        for ct, data_list in sr.by_type.items():
-            key = (sr.config.disease_name, ct)
-            if key not in disease_data:
-                disease_data[key] = (sr.config, [])
-            disease_data[key][1].extend(data_list)
-
-    # Track how many times each template has been used
-    template_usage: dict[str, int] = {}
-    assignments: list[TableAssignment] = []
-
-    for (disease_name, ct), (config, data_list) in disease_data.items():
-        if ct not in requested_types:
-            continue
-        compatible = COMPATIBLE_TEMPLATES[ct]
-        # Pick the first unused template, or the least-used one
-        selected = min(compatible, key=lambda t: template_usage.get(t, 0))
-        template_usage[selected] = template_usage.get(selected, 0) + 1
-
-        short_d = disease_name[:20]
-        short_t = {"A": "SetA", "B": "SetB", "C": "SetC", "PART_3": "Part3"}[ct.value]
-        assignments.append(TableAssignment(
-            template_sheet=selected,
-            output_name=f"{short_d}-{short_t}",
-            chart_type=ct,
-            data_list=data_list,
-            config=config,
-        ))
-
-    return assignments
+        return self.build_multi(disease_tables)

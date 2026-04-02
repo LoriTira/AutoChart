@@ -472,12 +472,27 @@ def _run_generate(args: argparse.Namespace) -> None:
 
     from autochart.builder.template_builder import TemplateBuilder
     tbuilder = TemplateBuilder()
-    output_bytes = tbuilder.build_auto(sheet_results, requested_types)
+    results = tbuilder.build_auto(sheet_results, requested_types)
 
     output_path = args.output
-    print(f"Saving output to: {output_path}")
-    with open(output_path, "wb") as f:
-        f.write(output_bytes)
+    if len(results) == 1:
+        # Single disease — save directly
+        disease_name, xlsx_bytes = next(iter(results.items()))
+        print(f"Saving output to: {output_path}")
+        with open(output_path, "wb") as f:
+            f.write(xlsx_bytes)
+    else:
+        # Multiple diseases — save each as separate file
+        base = Path(output_path).stem
+        ext = Path(output_path).suffix or ".xlsx"
+        parent = Path(output_path).parent
+        for disease_name, xlsx_bytes in results.items():
+            safe_name = disease_name.replace(" ", "_").replace("/", "_")[:30]
+            fpath = parent / f"{base}_{safe_name}{ext}"
+            print(f"Saving {disease_name} to: {fpath}")
+            with open(str(fpath), "wb") as f:
+                f.write(xlsx_bytes)
 
     print("\nGeneration complete!")
-    print(f"  Output: {output_path}")
+    for d in results:
+        print(f"  Disease: {d}")

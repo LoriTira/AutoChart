@@ -513,13 +513,17 @@ class TestEndToEnd:
             "-o", output_path,
         ])
 
-        assert Path(output_path).exists()
-        assert Path(output_path).stat().st_size > 0
+        # Multi-disease produces separate files: output_path_DiseaseName.xlsx
+        out_dir = Path(output_path).parent
+        output_files = list(out_dir.glob("*.xlsx"))
+        assert len(output_files) >= 1
 
-        # Verify it's a valid xlsx
-        wb = openpyxl.load_workbook(output_path)
-        assert len(wb.sheetnames) > 0
-        wb.close()
+        # Verify each is a valid xlsx
+        for f in output_files:
+            assert f.stat().st_size > 0
+            wb = openpyxl.load_workbook(str(f))
+            assert len(wb.sheetnames) > 0
+            wb.close()
 
         # Check stdout shows auto-detected config
         captured = capsys.readouterr()

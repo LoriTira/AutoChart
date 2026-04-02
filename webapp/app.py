@@ -176,118 +176,14 @@ if uploaded_file is not None:
             parsed_names = [sr.sheet_name for sr in sheet_results]
             st.success(f"Found {len(parsed_names)} input sheet(s): {', '.join(parsed_names)}")
 
-        # --- Per-Table Template Picker ---
-        st.subheader("Assign Templates to Tables")
+        # --- Detected Tables ---
+        st.subheader("Detected Tables")
 
         from autochart.builder.template_builder import (
-            COMPATIBLE_TEMPLATES, TableAssignment,
+            TEMPLATE_FOR_TYPE, TableAssignment,
         )
 
-        # Build list of tables: (disease_name, chart_type, config, data_list)
-        # Aggregate across sheets by (disease, chart_type)
-        table_list: list[tuple[str, ChartSetType, ChartConfig, list]] = []
-        seen_tables: set[tuple[str, str]] = set()
-        for sr in sheet_results:
-            for ct, data_list in sr.by_type.items():
-                key = (sr.config.disease_name, ct.value)
-                if key not in seen_tables:
-                    seen_tables.add(key)
-                    table_list.append((sr.config.disease_name, ct, sr.config, data_list))
-                else:
-                    # Append data to existing table entry
-                    for tbl in table_list:
-                        if tbl[0] == sr.config.disease_name and tbl[1] == ct:
-                            tbl[3].extend(data_list)
-                            break
-
-        # Use mutable lists so we can extend
-        table_entries: list[dict] = []
-        for disease_name, ct, config, data_list in table_list:
-            table_entries.append({
-                "disease": disease_name,
-                "chart_type": ct,
-                "config": config,
-                "data": list(data_list),
-            })
-
-        # SVG previews for templates that have a choice
-        from autochart.builder.template_builder import (
-            COMPATIBLE_TEMPLATES, TEMPLATE_LABELS, TableAssignment,
-        )
-
-        _TEMPLATE_SVG = {
-            "OUTPUT-1": (
-                '<svg viewBox="0 0 260 90" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:260px">'
-                '<rect width="260" height="90" fill="#f8f9fa" rx="4"/>'
-                '<text x="8" y="14" font-size="8" font-weight="bold" fill="#333">Compact</text>'
-                '<rect x="8" y="20" width="244" height="10" fill="#e8e8e8" rx="2"/>'
-                '<text x="50" y="28" font-size="6" fill="#666" text-anchor="middle">Boston</text>'
-                '<text x="130" y="28" font-size="6" fill="#666" text-anchor="middle">Female</text>'
-                '<text x="210" y="28" font-size="6" fill="#666" text-anchor="middle">Male</text>'
-                '<rect x="8" y="32" width="244" height="8" fill="#e8e8e8" rx="1"/>'
-                '<rect x="8" y="42" width="244" height="8" fill="#daeef3" rx="1"/>'
-                '<rect x="15" y="55" width="20" height="28" fill="#92D050"/>'
-                '<rect x="37" y="60" width="20" height="23" fill="#0070C0"/>'
-                '<rect x="59" y="58" width="20" height="25" fill="#0E2841"/>'
-                '<rect x="95" y="65" width="20" height="18" fill="#92D050"/>'
-                '<rect x="117" y="60" width="20" height="23" fill="#0070C0"/>'
-                '<rect x="139" y="61" width="20" height="22" fill="#0E2841"/>'
-                '<rect x="175" y="52" width="20" height="31" fill="#92D050"/>'
-                '<rect x="197" y="48" width="20" height="35" fill="#0070C0"/>'
-                '<rect x="219" y="49" width="20" height="34" fill="#0E2841"/>'
-                '</svg>'
-            ),
-            "OUTPUT-5": (
-                '<svg viewBox="0 0 260 90" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:260px">'
-                '<rect width="260" height="90" fill="#f8f9fa" rx="4"/>'
-                '<text x="8" y="14" font-size="8" font-weight="bold" fill="#333">With Instructions</text>'
-                '<rect x="8" y="19" width="160" height="3" fill="#ccc" rx="1"/>'
-                '<rect x="8" y="24" width="140" height="3" fill="#ccc" rx="1"/>'
-                '<rect x="8" y="29" width="150" height="3" fill="#ccc" rx="1"/>'
-                '<rect x="8" y="36" width="244" height="8" fill="#e8e8e8" rx="2"/>'
-                '<rect x="8" y="46" width="244" height="6" fill="#e8e8e8" rx="1"/>'
-                '<rect x="8" y="54" width="244" height="6" fill="#daeef3" rx="1"/>'
-                '<rect x="15" y="64" width="16" height="18" fill="#92D050"/>'
-                '<rect x="33" y="67" width="16" height="15" fill="#0070C0"/>'
-                '<rect x="51" y="66" width="16" height="16" fill="#0E2841"/>'
-                '<rect x="83" y="71" width="16" height="11" fill="#92D050"/>'
-                '<rect x="101" y="67" width="16" height="15" fill="#0070C0"/>'
-                '<rect x="119" y="68" width="16" height="14" fill="#0E2841"/>'
-                '<rect x="155" y="62" width="16" height="20" fill="#92D050"/>'
-                '<rect x="173" y="59" width="16" height="23" fill="#0070C0"/>'
-                '<rect x="191" y="60" width="16" height="22" fill="#0E2841"/>'
-                '</svg>'
-            ),
-            "OUTPUT-6": (
-                '<svg viewBox="0 0 260 90" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:260px">'
-                '<rect width="260" height="90" fill="#f8f9fa" rx="4"/>'
-                '<text x="8" y="14" font-size="8" font-weight="bold" fill="#333">Compact</text>'
-                '<text x="55" y="28" font-size="7" fill="#666" text-anchor="middle">Race</text>'
-                '<text x="130" y="28" font-size="7" fill="#666" text-anchor="middle">White</text>'
-                '<text x="205" y="28" font-size="7" fill="#666" text-anchor="middle">Boston</text>'
-                '<rect x="30" y="35" width="50" height="45" fill="#0E2841"/>'
-                '<rect x="105" y="45" width="50" height="35" fill="#0E2841"/>'
-                '<rect x="180" y="42" width="50" height="38" fill="#0E2841"/>'
-                '</svg>'
-            ),
-            "OUTPUT-2": (
-                '<svg viewBox="0 0 260 90" xmlns="http://www.w3.org/2000/svg" style="width:100%;max-width:260px">'
-                '<rect width="260" height="90" fill="#f8f9fa" rx="4"/>'
-                '<text x="8" y="14" font-size="8" font-weight="bold" fill="#333">With Instructions</text>'
-                '<rect x="8" y="19" width="140" height="3" fill="#ccc" rx="1"/>'
-                '<rect x="8" y="24" width="120" height="3" fill="#ccc" rx="1"/>'
-                '<rect x="8" y="29" width="130" height="3" fill="#ccc" rx="1"/>'
-                '<text x="55" y="42" font-size="7" fill="#666" text-anchor="middle">Race</text>'
-                '<text x="130" y="42" font-size="7" fill="#666" text-anchor="middle">White</text>'
-                '<text x="205" y="42" font-size="7" fill="#666" text-anchor="middle">Boston</text>'
-                '<rect x="30" y="48" width="50" height="32" fill="#0E2841"/>'
-                '<rect x="105" y="55" width="50" height="25" fill="#0E2841"/>'
-                '<rect x="180" y="52" width="50" height="28" fill="#0E2841"/>'
-                '</svg>'
-            ),
-        }
-
-        # Build table entries from parsed data
+        # Aggregate tables by (disease, chart_type)
         table_entries: list[dict] = []
         seen_tables: set[tuple[str, str]] = set()
         for sr in sheet_results:
@@ -307,37 +203,11 @@ if uploaded_file is not None:
                             tbl["data"].extend(data_list)
                             break
 
-        # Show per-table template assignment
-        user_assignments: list[dict] = []
-
-        for idx, tbl in enumerate(table_entries):
+        for tbl in table_entries:
             ct = tbl["chart_type"]
-            compatible = COMPATIBLE_TEMPLATES[ct]
-
             with st.container(border=True):
                 st.markdown(f"**{tbl['disease']}** — {ct.label}")
-
-                if len(compatible) == 1:
-                    # Only one template — auto-assign, no picker needed
-                    st.caption(f"Template: {TEMPLATE_LABELS[compatible[0]]}")
-                    user_assignments.append({**tbl, "template": compatible[0]})
-                else:
-                    # Show visual cards side by side
-                    cols = st.columns(len(compatible))
-                    for col_idx, tmpl_name in enumerate(compatible):
-                        with cols[col_idx]:
-                            svg = _TEMPLATE_SVG.get(tmpl_name, "")
-                            st.markdown(svg, unsafe_allow_html=True)
-
-                    selected = st.radio(
-                        f"Pick template for {tbl['disease']} {ct.label}",
-                        compatible,
-                        format_func=lambda x: TEMPLATE_LABELS.get(x, x),
-                        key=f"tpl_{idx}",
-                        horizontal=True,
-                        label_visibility="collapsed",
-                    )
-                    user_assignments.append({**tbl, "template": selected})
+                st.caption(f"{len(tbl['data'])} data item(s)")
 
         # --- Generate ---
         st.divider()
@@ -351,7 +221,7 @@ if uploaded_file is not None:
             if not cfg.get("years"):
                 missing_fields.append(f"{disease_label}: years")
 
-        can_generate = bool(user_assignments) and bool(sheet_results) and not missing_fields
+        can_generate = bool(table_entries) and bool(sheet_results) and not missing_fields
 
         for mf in missing_fields:
             st.warning(f"Missing: {mf}. Please enter it in the sidebar.")
@@ -364,16 +234,15 @@ if uploaded_file is not None:
         if generate_clicked and can_generate:
             st.session_state.output_bytes = None
 
-            # Build TableAssignment objects from user selections
             from autochart.builder.template_builder import TemplateBuilder
 
-            assignments: list[TableAssignment] = []
-            for ua in user_assignments:
-                # Apply sidebar config overrides
-                cfg = ua["config"]
+            # Group tables by disease
+            disease_tables: dict[str, dict] = {}
+            for tbl in table_entries:
+                cfg = tbl["config"]
                 override = sheet_configs.get(
-                    next((sn for sn, _ in per_sheet_extracted.items()
-                          if per_sheet_extracted[sn].disease_name == ua["disease"]), ""),
+                    next((sn for sn in per_sheet_extracted
+                          if per_sheet_extracted[sn].disease_name == tbl["disease"]), ""),
                     {},
                 )
                 if override:
@@ -394,17 +263,10 @@ if uploaded_file is not None:
                         ),
                     )
 
-                # Keep ≤31 chars for Excel
-                short_d = ua["disease"][:20]
-                short_t = {"A": "SetA", "B": "SetB", "C": "SetC", "PART_3": "Part3"}[ua["chart_type"].value]
-                output_name = f"{short_d}-{short_t}"
-                assignments.append(TableAssignment(
-                    template_sheet=ua["template"],
-                    output_name=output_name,
-                    chart_type=ua["chart_type"],
-                    data_list=ua["data"],
-                    config=cfg,
-                ))
+                d = tbl["disease"]
+                if d not in disease_tables:
+                    disease_tables[d] = {}
+                disease_tables[d][tbl["chart_type"]] = (cfg, tbl["data"])
 
             progress = st.progress(0, text="Building charts from template...")
 
@@ -412,12 +274,11 @@ if uploaded_file is not None:
                 tbuilder = TemplateBuilder()
                 progress.progress(30, text="Filling templates with data...")
 
-                output_bytes = tbuilder.build(assignments)
-
-                st.session_state.output_bytes = output_bytes
+                results = tbuilder.build_multi(disease_tables)
+                st.session_state.output_results = results
                 progress.progress(100, text="Done!")
 
-                st.success(f"Generated {len(assignments)} chart sheet(s)!")
+                st.success(f"Generated charts for {len(results)} disease(s)!")
 
             except Exception as e:
                 st.error(f"Generation failed: {e}")
@@ -425,19 +286,19 @@ if uploaded_file is not None:
                 st.expander("Error details").code(traceback.format_exc())
 
         # --- Download ---
-        if st.session_state.get("output_bytes") is not None:
-            fname = "autochart_output.xlsx"
-            if len(disease_groups) == 1:
-                disease = list(disease_groups.keys())[0]
-                fname = f"autochart_{disease.replace(' ', '_').lower()}.xlsx"
-            st.download_button(
-                "Download Output",
-                data=st.session_state.output_bytes,
-                file_name=fname,
-                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                type="primary",
-                use_container_width=True,
-            )
+        if st.session_state.get("output_results") is not None:
+            results = st.session_state.output_results
+            for disease_name, xlsx_bytes in results.items():
+                safe = disease_name.replace(" ", "_").lower()[:30]
+                st.download_button(
+                    f"Download {disease_name}",
+                    data=xlsx_bytes,
+                    file_name=f"autochart_{safe}.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    type="primary",
+                    use_container_width=True,
+                    key=f"dl_{safe}",
+                )
 
 else:
     st.info("Upload an Excel file to get started. Configuration will be auto-detected from each sheet independently.")
