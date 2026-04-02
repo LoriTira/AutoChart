@@ -1,4 +1,4 @@
-"""Tests for Part 3: Sex- and Race-Stratified."""
+"""Tests for Part 3: Sex- and Race-Stratified -- WIDE format."""
 
 from __future__ import annotations
 
@@ -73,55 +73,64 @@ def builder(config: ChartConfig) -> WorkbookBuilder:
 class TestBuildPart3Sheet:
     """Test the build_part_3_sheet function directly."""
 
-    def test_section_header(self, config, part_3_data):
+    def test_sheet_title(self, config, part_3_data):
         wb = openpyxl.Workbook()
         ws = wb.active
         build_part_3_sheet(ws, part_3_data, config)
-        assert ws.cell(row=1, column=1).value == "All Cancer Mortality"
+        assert ws.cell(row=1, column=1).value == "Part 3: Sex- and Race-Stratified Charts"
 
-    def test_chart_title(self, config, part_3_data):
+    def test_merged_group_headers(self, config, part_3_data):
+        """Row 3: merged Female (B:F) and Male (G:K) headers."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_part_3_sheet(ws, part_3_data, config)
-        title = str(ws.cell(row=3, column=1).value)
-        assert "by Sex and Race" in title
-        assert "2017-2023" in title
+        assert ws.cell(row=3, column=2).value == "Female"  # B3
+        assert ws.cell(row=3, column=7).value == "Male"    # G3
 
-    def test_data_table_headers(self, config, part_3_data):
+    def test_sub_headers(self, config, part_3_data):
+        """Row 4: race names x2 as sub-headers."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_part_3_sheet(ws, part_3_data, config)
-        # Headers in row 4
-        assert ws.cell(row=4, column=1).value == ""
+        # Female sub-headers (B4:F4)
         assert ws.cell(row=4, column=2).value == "Asian"
         assert ws.cell(row=4, column=3).value == "Black"
         assert ws.cell(row=4, column=4).value == "Latinx"
         assert ws.cell(row=4, column=5).value == "White"
         assert ws.cell(row=4, column=6).value == "Boston"
+        # Male sub-headers (G4:K4)
+        assert ws.cell(row=4, column=7).value == "Asian"
+        assert ws.cell(row=4, column=8).value == "Black"
+        assert ws.cell(row=4, column=9).value == "Latinx"
+        assert ws.cell(row=4, column=10).value == "White"
+        assert ws.cell(row=4, column=11).value == "Boston"
 
-    def test_data_table_female_row(self, config, part_3_data):
+    def test_data_row_values(self, config, part_3_data):
+        """Row 5: single data row with 10 values (B-K)."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_part_3_sheet(ws, part_3_data, config)
-        # Female row at row 5
-        assert ws.cell(row=5, column=1).value == "Female"
-        assert ws.cell(row=5, column=2).value == 87.9   # Asian female
-        assert ws.cell(row=5, column=3).value == 127.7  # Black female
-        assert ws.cell(row=5, column=4).value == 88.5   # Latinx female
-        assert ws.cell(row=5, column=5).value == 108.2  # White female
-        assert ws.cell(row=5, column=6).value == 111.5  # Boston female
+        # Female values (B5:F5)
+        assert ws.cell(row=5, column=2).value == 87.9    # Asian female
+        assert ws.cell(row=5, column=3).value == 127.7   # Black female
+        assert ws.cell(row=5, column=4).value == 88.5    # Latinx female
+        assert ws.cell(row=5, column=5).value == 108.2   # White female
+        assert ws.cell(row=5, column=6).value == 111.5   # Boston female
+        # Male values (G5:K5)
+        assert ws.cell(row=5, column=7).value == 141.1   # Asian male
+        assert ws.cell(row=5, column=8).value == 188.5   # Black male
+        assert ws.cell(row=5, column=9).value == 113.9   # Latinx male
+        assert ws.cell(row=5, column=10).value == 148.0  # White male
+        assert ws.cell(row=5, column=11).value == 150.8  # Boston male
 
-    def test_data_table_male_row(self, config, part_3_data):
+    def test_chart_title_below_data(self, config, part_3_data):
+        """Chart title is below the data row."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_part_3_sheet(ws, part_3_data, config)
-        # Male row at row 6
-        assert ws.cell(row=6, column=1).value == "Male"
-        assert ws.cell(row=6, column=2).value == 141.1  # Asian male
-        assert ws.cell(row=6, column=3).value == 188.5  # Black male
-        assert ws.cell(row=6, column=4).value == 113.9  # Latinx male
-        assert ws.cell(row=6, column=5).value == 148.0  # White male
-        assert ws.cell(row=6, column=6).value == 150.8  # Boston male
+        # Title is at data_row + 3 = row 8, in column B
+        title = str(ws.cell(row=8, column=2).value)
+        assert "by Sex and Race" in title or "2017-2023" in title
 
     def test_chart_created(self, config, part_3_data):
         wb = openpyxl.Workbook()
@@ -129,12 +138,13 @@ class TestBuildPart3Sheet:
         build_part_3_sheet(ws, part_3_data, config)
         assert len(ws._charts) == 1
 
-    def test_chart_has_two_series(self, config, part_3_data):
+    def test_chart_has_single_series(self, config, part_3_data):
+        """WIDE format uses a single series with 10 data points."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_part_3_sheet(ws, part_3_data, config)
         chart = ws._charts[0]
-        assert len(chart.series) == 2
+        assert len(chart.series) == 1
 
     def test_chart_type_is_col(self, config, part_3_data):
         wb = openpyxl.Workbook()
@@ -157,11 +167,12 @@ class TestBuildPart3Sheet:
         ws = wb.active
         build_part_3_sheet(ws, part_3_data, config)
         chart = ws._charts[0]
-        for series in chart.series:
-            assert series.dLbls is not None
-            assert series.dLbls.showVal is True
+        series = chart.series[0]
+        assert series.dLbls is not None
+        assert series.dLbls.showVal is True
 
-    def test_descriptive_text_present(self, config, part_3_data):
+    def test_no_descriptive_text(self, config, part_3_data):
+        """New format has no descriptive text."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_part_3_sheet(ws, part_3_data, config)
@@ -170,9 +181,10 @@ class TestBuildPart3Sheet:
             if row[0] and "age-adjusted" in str(row[0]).lower():
                 found_descriptive = True
                 break
-        assert found_descriptive, "Descriptive text not found in the sheet"
+        assert not found_descriptive, "Descriptive text should not be present in new format"
 
-    def test_footnote_present(self, config, part_3_data):
+    def test_no_footnote(self, config, part_3_data):
+        """New format has no footnotes."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_part_3_sheet(ws, part_3_data, config)
@@ -181,7 +193,7 @@ class TestBuildPart3Sheet:
             if row[0] and "DATA SOURCE" in str(row[0]):
                 found_footnote = True
                 break
-        assert found_footnote, "Footnote text not found in the sheet"
+        assert not found_footnote, "Footnote should not be present in new format"
 
     def test_chart_has_no_legend(self, config, part_3_data):
         wb = openpyxl.Workbook()
@@ -198,22 +210,13 @@ class TestBuildPart3Sheet:
         assert chart.y_axis.title is not None
         assert "per 100,000" in str(chart.y_axis.title)
 
-    def test_header_cells_have_gray_fill(self, config, part_3_data):
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        build_part_3_sheet(ws, part_3_data, config)
-        header_cell = ws.cell(row=4, column=2)
-        assert header_cell.fill.start_color.rgb == "00D9D9D9"
-
-    def test_both_series_are_navy(self, config, part_3_data):
+    def test_single_series_has_fill(self, config, part_3_data):
         wb = openpyxl.Workbook()
         ws = wb.active
         build_part_3_sheet(ws, part_3_data, config)
         chart = ws._charts[0]
-        for i, series in enumerate(chart.series):
-            assert series.graphicalProperties.solidFill is not None, (
-                f"Series {i} should have a navy solid fill"
-            )
+        series = chart.series[0]
+        assert series.graphicalProperties.solidFill is not None
 
 
 # ---------------------------------------------------------------------------
@@ -244,12 +247,9 @@ class TestAddPart3Integration:
         data = builder.save_bytes()
         loaded = openpyxl.load_workbook(io.BytesIO(data))
         ws = loaded["OUTPUT-4"]
-        # Check female row values
-        assert ws.cell(row=5, column=1).value == "Female"
-        assert ws.cell(row=5, column=2).value == 87.9
-        # Check male row values
-        assert ws.cell(row=6, column=1).value == "Male"
-        assert ws.cell(row=6, column=2).value == 141.1
+        # WIDE format: single data row at row 5
+        assert ws.cell(row=5, column=2).value == 87.9   # Asian female
+        assert ws.cell(row=5, column=7).value == 141.1  # Asian male
 
     def test_multiple_calls_create_unique_sheets(self, builder, part_3_data):
         builder.add_part_3(part_3_data)

@@ -209,6 +209,34 @@ def extract_config(
     return result
 
 
+def extract_config_per_sheet(
+    path: str | Path,
+    sheet_prefix: str = "INPUT",
+) -> dict[str, ExtractedConfig]:
+    """Extract config independently from each INPUT sheet.
+
+    Unlike :func:`extract_config` which aggregates across all sheets,
+    this function returns a separate :class:`ExtractedConfig` per sheet
+    so that sheets with different diseases or rate units get their own
+    config.
+
+    Returns:
+        Dict mapping sheet name to that sheet's extracted config.
+    """
+    path = Path(path)
+    wb = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
+    input_sheets = [
+        name for name in wb.sheetnames
+        if name.upper().startswith(sheet_prefix.upper())
+    ]
+    wb.close()
+
+    results: dict[str, ExtractedConfig] = {}
+    for sheet_name in input_sheets:
+        results[sheet_name] = extract_config(path, sheets=[sheet_name])
+    return results
+
+
 # ---------------------------------------------------------------------------
 # Merge function
 # ---------------------------------------------------------------------------

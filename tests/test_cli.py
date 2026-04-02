@@ -290,8 +290,8 @@ class TestComputeChartPatches:
         assert 1 not in patches[0].asterisk_points  # Black not significant
         assert 2 in patches[0].asterisk_points  # Latinx significant
 
-    def test_part_3_two_series_patches(self, config):
-        """Part 3 produces 2 patches (female + male series)."""
+    def test_part_3_single_series_patch(self, config):
+        """Part 3 produces 1 patch (single series with 10 points)."""
         female = [
             _make_rate_comparison(group="Asian", p_value=0.01),
             _make_rate_comparison(group="Black", p_value=0.5),
@@ -312,15 +312,17 @@ class TestComputeChartPatches:
         by_type = {ChartSetType.PART_3: [p3_data]}
         patches = _compute_chart_patches(by_type, [ChartSetType.PART_3], config)
 
-        assert len(patches) == 2
-        # Both patches target the same chart
-        assert patches[0].chart_index == patches[1].chart_index == 1
-        # Female series (0) and male series (1)
-        assert patches[0].series_index == 0
-        assert patches[1].series_index == 1
-        # White bar pattern fills
-        assert patches[0].pattern_fill_points == [3]
-        assert patches[1].pattern_fill_points == [3]
+        assert len(patches) == 1
+        patch = patches[0]
+        assert patch.chart_index == 1
+        assert patch.series_index == 0
+        # White bars at indices 3 (female White) and 8 (male White)
+        # n_races=3, n_sub=5, female_white=3, male_white=5+3=8
+        assert patch.pattern_fill_points == [3, 8]
+        # Asterisks: female Asian(0), female Latinx(2), male Black(5+1=6)
+        assert 0 in patch.asterisk_points
+        assert 2 in patch.asterisk_points
+        assert 6 in patch.asterisk_points
 
     def test_chart_set_a_significant_asterisks(self, config):
         """Chart Set A: significant comparisons get asterisks on race series."""
@@ -339,9 +341,9 @@ class TestComputeChartPatches:
 
         assert len(patches) == 1
         assert patches[0].chart_index == 1
-        assert 0 in patches[0].asterisk_points  # boston significant
-        assert 1 not in patches[0].asterisk_points  # female not significant
-        assert 2 in patches[0].asterisk_points  # male significant
+        assert 0 in patches[0].asterisk_points  # boston significant (index 0)
+        assert 3 not in patches[0].asterisk_points  # female not significant (index 3)
+        assert 6 in patches[0].asterisk_points  # male significant (index 6)
 
     def test_chart_set_a_no_significance_no_patch(self, config):
         """Chart Set A with no significant comparisons creates no patches."""

@@ -14,7 +14,8 @@ from autochart.config import (
     Part3Data,
     RateComparison,
 )
-from autochart.parser import parse_workbook, get_all_data_by_type, auto_parse
+from autochart.config import SheetResult
+from autochart.parser import parse_workbook, get_all_data_by_type, auto_parse, auto_parse_multi
 from autochart.parser.pivoted import PivotedParser
 from autochart.parser.sas_output import SASOutputParser, _parse_p_value, _parse_ci
 
@@ -597,3 +598,75 @@ class TestAutoParse:
         # Same number of data items per type
         for ct in by_type_auto:
             assert len(by_type_auto[ct]) == len(by_type_manual[ct])
+
+
+# ---------------------------------------------------------------------------
+# auto_parse_multi tests (per-sheet config)
+# ---------------------------------------------------------------------------
+
+class TestAutoParseMulti:
+    """Tests for the per-sheet auto_parse_multi function."""
+
+    @pytest.mark.skipif(
+        not EXAMPLES_PATH.exists(), reason="examples.xlsx not found"
+    )
+    def test_returns_sheet_results(self):
+        """Should return a list of SheetResult objects."""
+        results = auto_parse_multi(EXAMPLES_PATH)
+        assert isinstance(results, list)
+        assert all(isinstance(r, SheetResult) for r in results)
+        assert len(results) > 0
+
+    @pytest.mark.skipif(
+        not EXAMPLES_PATH.exists(), reason="examples.xlsx not found"
+    )
+    def test_each_sheet_has_own_config(self):
+        """Each SheetResult should have its own ChartConfig."""
+        results = auto_parse_multi(EXAMPLES_PATH)
+        configs = [r.config for r in results]
+        # Should have at least 2 different disease names
+        disease_names = {c.disease_name for c in configs}
+        assert len(disease_names) >= 2, (
+            f"Expected multiple diseases, got: {disease_names}"
+        )
+
+    @pytest.mark.skipif(
+        not EXAMPLES_PATH.exists(), reason="examples.xlsx not found"
+    )
+    def test_per_sheet_rate_units(self):
+        """Cancer sheets should have per-100k and cerebro sheets per-10k."""
+        results = auto_parse_multi(EXAMPLES_PATH)
+        rates_by_disease: dict[str, set] = {}
+        for r in results:
+            rates_by_disease.setdefault(r.config.disease_name, set()).add(
+                r.config.rate_denominator
+            )
+        # Each disease group should have a consistent rate denominator
+        for disease, denoms in rates_by_disease.items():
+            assert len(denoms) == 1, (
+                f"{disease} has inconsistent rate denominators: {denoms}"
+            )
+
+    @pytest.mark.skipif(
+        not EXAMPLES_PATH.exists(), reason="examples.xlsx not found"
+    )
+    def test_overrides_apply_to_all_sheets(self):
+        """Config overrides should apply to every sheet."""
+        results = auto_parse_multi(
+            EXAMPLES_PATH,
+            config_overrides={"geography": "Cambridge"},
+        )
+        for r in results:
+            assert r.config.geography == "Cambridge"
+
+    @pytest.mark.skipif(
+        not EXAMPLES_PATH.exists(), reason="examples.xlsx not found"
+    )
+    def test_by_type_populated(self):
+        """Each SheetResult should have parsed chart data."""
+        results = auto_parse_multi(EXAMPLES_PATH)
+        for r in results:
+            assert len(r.by_type) > 0
+            for ct, data_list in r.by_type.items():
+                assert isinstance(data_list, list)
+                assert len(data_list) > 0

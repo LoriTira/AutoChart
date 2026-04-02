@@ -142,3 +142,15 @@ class Part3Data:
     male_comparisons: list[RateComparison]    # each race vs white, male
     female_boston_rate: float
     male_boston_rate: float
+
+
+@dataclass
+class SheetResult:
+    """Parsed data from a single INPUT sheet with its own config.
+
+    Groups a sheet's parsed chart data with the config extracted
+    specifically from that sheet.
+    """
+    sheet_name: str
+    config: ChartConfig
+    by_type: dict  # ChartSetType -> list of data objects

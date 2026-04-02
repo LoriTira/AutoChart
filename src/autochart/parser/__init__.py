@@ -10,7 +10,7 @@ from typing import Union
 
 import openpyxl
 
-from autochart.config import ChartConfig, ChartSetType
+from autochart.config import ChartConfig, ChartSetType, SheetResult
 from autochart.parser.base import BaseParser
 from autochart.parser.pivoted import PivotedParser
 from autochart.parser.sas_output import SASOutputParser
@@ -104,6 +104,12 @@ def auto_parse(
     from the workbook automatically, merges with any user overrides, then
     parses all INPUT sheets.
 
+    .. note::
+
+        This uses a single aggregated config for all sheets.  For workbooks
+        where sheets have different diseases or rate units, use
+        :func:`auto_parse_multi` instead.
+
     Args:
         path: Path to the input .xlsx workbook.
         config_overrides: Optional dict of user-specified config values
@@ -120,3 +126,88 @@ def auto_parse(
     results = parse_workbook(path, config, sheet_prefix)
     by_type = get_all_data_by_type(results)
     return config, by_type
+
+
+def auto_parse_multi(
+    path: Union[str, Path],
+    config_overrides: dict | None = None,
+    sheet_prefix: str = "INPUT",
+) -> list[SheetResult]:
+    """Auto-detect per-sheet config and parse each INPUT sheet independently.
+
+    Unlike :func:`auto_parse`, this extracts metadata from each sheet
+    separately so that sheets with different diseases or rate units get
+    their own :class:`~autochart.config.ChartConfig`.
+
+    When a sheet is missing fields (e.g. no years in its title cells),
+    the function falls back to values found in other sheets within the
+    same workbook before raising an error.
+
+    Args:
+        path: Path to the input .xlsx workbook.
+        config_overrides: Optional dict of user-specified config values
+            that override auto-detected values on every sheet.
+        sheet_prefix: Prefix to filter sheets (default: "INPUT").
+
+    Returns:
+        List of :class:`~autochart.config.SheetResult`, one per parsed sheet.
+    """
+    from autochart.extractor import (
+        ExtractedConfig,
+        extract_config,
+        extract_config_per_sheet,
+        build_config,
+    )
+
+    per_sheet = extract_config_per_sheet(str(path), sheet_prefix)
+
+    # Build per-disease fallbacks: group sheets by disease name and aggregate
+    # values within each group so that e.g. Cancer sheets inherit rate_denom
+    # from other Cancer sheets, not from Cerebro sheets.
+    disease_groups: dict[str | None, list[str]] = {}
+    for sn, ec in per_sheet.items():
+        disease_groups.setdefault(ec.disease_name, []).append(sn)
+
+    disease_fallbacks: dict[str | None, ExtractedConfig] = {}
+    for disease, sheet_names in disease_groups.items():
+        disease_fallbacks[disease] = extract_config(str(path), sheets=sheet_names)
+
+    # Global fallback for truly missing fields
+    global_fallback = extract_config(str(path))
+
+    wb = openpyxl.load_workbook(str(path), data_only=True)
+    results: list[SheetResult] = []
+
+    for sheet_name, extracted in per_sheet.items():
+        # Prefer same-disease fallback, then global fallback
+        disease_fb = disease_fallbacks.get(extracted.disease_name, global_fallback)
+        merged = ExtractedConfig(
+            disease_name=extracted.disease_name or disease_fb.disease_name or global_fallback.disease_name,
+            years=extracted.years or disease_fb.years or global_fallback.years,
+            rate_unit=extracted.rate_unit or disease_fb.rate_unit or global_fallback.rate_unit,
+            rate_denominator=extracted.rate_denominator or disease_fb.rate_denominator or global_fallback.rate_denominator,
+            data_source=extracted.data_source or disease_fb.data_source or global_fallback.data_source,
+            geography=extracted.geography or disease_fb.geography or global_fallback.geography,
+            demographics=extracted.demographics or disease_fb.demographics or global_fallback.demographics,
+            reference_group=extracted.reference_group or disease_fb.reference_group or global_fallback.reference_group,
+            confidence=extracted.confidence,
+        )
+
+        config = build_config(merged, config_overrides)
+        ws = wb[sheet_name]
+        parsed = _parse_sheet(ws, config)
+        if parsed:
+            by_type: dict[ChartSetType, list] = {}
+            for chart_type, data in parsed.items():
+                if isinstance(data, list):
+                    by_type[chart_type] = data
+                else:
+                    by_type[chart_type] = [data]
+            results.append(SheetResult(
+                sheet_name=sheet_name,
+                config=config,
+                by_type=by_type,
+            ))
+
+    wb.close()
+    return results

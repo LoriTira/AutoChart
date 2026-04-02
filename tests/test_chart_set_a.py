@@ -1,4 +1,4 @@
-"""Tests for Chart Set A: Race vs Rest of Boston."""
+"""Tests for Chart Set A: Race vs Rest of Boston -- WIDE format."""
 
 from __future__ import annotations
 
@@ -106,49 +106,71 @@ class TestBuildChartSetASheet:
         # Should return without error; no data written
         assert ws.cell(row=1, column=1).value is None
 
-    def test_single_race_produces_section_header(self, config, asian_data):
+    def test_sheet_title(self, config, asian_data):
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
-        assert ws.cell(row=1, column=1).value == "All Cancer Mortality"
+        assert ws.cell(row=1, column=1).value == "Chart Set A: Race vs Boston overall and Rest of Boston"
 
-    def test_single_race_produces_chart_title(self, config, asian_data):
+    def test_merged_group_headers(self, config, asian_data):
+        """First race block starts at row 3 with merged headers: Boston, Female, Male."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
-        # Chart title should be in row 3 (row 1 = section header, row 2 = blank, row 3 = title)
-        assert "Asian" in str(ws.cell(row=3, column=1).value)
-        assert "2017-2023" in str(ws.cell(row=3, column=1).value)
+        # Merged headers at row 3
+        assert ws.cell(row=3, column=2).value == "Boston"   # B3
+        assert ws.cell(row=3, column=5).value == "Female"   # E3
+        assert ws.cell(row=3, column=8).value == "Male"     # H3
 
-    def test_single_race_data_table_headers(self, config, asian_data):
+    def test_sub_headers(self, config, asian_data):
+        """Sub-headers at row 4: [Race, Rest of Boston, Boston Overall] x3."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
-        # Headers should be in row 4
-        assert ws.cell(row=4, column=1).value == ""
+        # Sub-headers at row 4 for all 3 groups
         assert ws.cell(row=4, column=2).value == "Asian"
         assert ws.cell(row=4, column=3).value == "Rest of Boston"
         assert ws.cell(row=4, column=4).value == "Boston Overall"
+        assert ws.cell(row=4, column=5).value == "Asian"
+        assert ws.cell(row=4, column=6).value == "Rest of Boston"
+        assert ws.cell(row=4, column=7).value == "Boston Overall"
+        assert ws.cell(row=4, column=8).value == "Asian"
+        assert ws.cell(row=4, column=9).value == "Rest of Boston"
+        assert ws.cell(row=4, column=10).value == "Boston Overall"
 
-    def test_single_race_data_table_values(self, config, asian_data):
+    def test_data_row_label(self, config, asian_data):
+        """Data row has 'All {Disease}' label in col A at row 5."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
-        # Data rows start at row 5
-        assert ws.cell(row=5, column=1).value == "Boston"
-        assert ws.cell(row=5, column=2).value == 110.5
-        assert ws.cell(row=5, column=3).value == 130.6
-        assert ws.cell(row=5, column=4).value == 128.8
+        assert ws.cell(row=5, column=1).value == "All Cancer Mortality"
 
-        assert ws.cell(row=6, column=1).value == "Female"
-        assert ws.cell(row=6, column=2).value == 87.9
-        assert ws.cell(row=6, column=3).value == 113.5
-        assert ws.cell(row=6, column=4).value == 111.5
+    def test_data_row_values(self, config, asian_data):
+        """Data row 5: 9 values across B-J in WIDE format."""
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        build_chart_set_a_sheet(ws, [asian_data], config)
+        # Boston group: race, rest, overall
+        assert ws.cell(row=5, column=2).value == 110.5   # Asian (Boston)
+        assert ws.cell(row=5, column=3).value == 130.6   # Rest of Boston
+        assert ws.cell(row=5, column=4).value == 128.8   # Boston Overall
+        # Female group
+        assert ws.cell(row=5, column=5).value == 87.9    # Asian (Female)
+        assert ws.cell(row=5, column=6).value == 113.5   # Rest of Boston
+        assert ws.cell(row=5, column=7).value == 111.5   # Female Overall
+        # Male group
+        assert ws.cell(row=5, column=8).value == 141.1   # Asian (Male)
+        assert ws.cell(row=5, column=9).value == 152.9   # Rest of Boston
+        assert ws.cell(row=5, column=10).value == 150.8  # Male Overall
 
-        assert ws.cell(row=7, column=1).value == "Male"
-        assert ws.cell(row=7, column=2).value == 141.1
-        assert ws.cell(row=7, column=3).value == 152.9
-        assert ws.cell(row=7, column=4).value == 150.8
+    def test_chart_title_below_data(self, config, asian_data):
+        """Chart title is 2 rows below data row (row 7)."""
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        build_chart_set_a_sheet(ws, [asian_data], config)
+        title_val = str(ws.cell(row=7, column=1).value)
+        assert "Asian" in title_val
+        assert "2017-2023" in title_val
 
     def test_single_race_chart_created(self, config, asian_data):
         wb = openpyxl.Workbook()
@@ -162,12 +184,13 @@ class TestBuildChartSetASheet:
         build_chart_set_a_sheet(ws, data_list, config)
         assert len(ws._charts) == 3
 
-    def test_chart_has_three_series(self, config, asian_data):
+    def test_chart_has_single_series(self, config, asian_data):
+        """WIDE format uses a single series with 9 data points."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
         chart = ws._charts[0]
-        assert len(chart.series) == 3
+        assert len(chart.series) == 1
 
     def test_chart_type_is_col(self, config, asian_data):
         wb = openpyxl.Workbook()
@@ -190,50 +213,51 @@ class TestBuildChartSetASheet:
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
         chart = ws._charts[0]
-        for series in chart.series:
-            assert series.dLbls is not None
-            assert series.dLbls.showVal is True
+        series = chart.series[0]
+        assert series.dLbls is not None
+        assert series.dLbls.showVal is True
 
-    def test_descriptive_text_present(self, config, asian_data):
+    def test_no_descriptive_text(self, config, asian_data):
+        """New format has no descriptive text or footnotes."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
-        # Find the descriptive text somewhere in the sheet
         found_descriptive = False
         for row in ws.iter_rows(min_row=1, max_row=50, min_col=1, max_col=1, values_only=True):
             if row[0] and "age-adjusted" in str(row[0]).lower():
                 found_descriptive = True
                 break
-        assert found_descriptive, "Descriptive text not found in the sheet"
+        assert not found_descriptive, "Descriptive text should not be present in new format"
 
-    def test_footnote_present(self, config, asian_data):
+    def test_no_footnote(self, config, asian_data):
+        """New format has no footnotes."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
-        # Find the footnote text somewhere in the sheet
         found_footnote = False
         for row in ws.iter_rows(min_row=1, max_row=50, min_col=1, max_col=1, values_only=True):
             if row[0] and "DATA SOURCE" in str(row[0]):
                 found_footnote = True
                 break
-        assert found_footnote, "Footnote text not found in the sheet"
+        assert not found_footnote, "Footnote should not be present in new format"
 
     def test_header_cells_have_gray_fill(self, config, asian_data):
+        """Fill is E8E8E8 (was D9D9D9)."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
-        header_cell = ws.cell(row=4, column=2)
-        assert header_cell.fill.start_color.rgb == "00D9D9D9"
+        header_cell = ws.cell(row=3, column=2)
+        assert header_cell.fill.start_color.rgb == "00E8E8E8"
 
     def test_race_column_highlighted(self, config, asian_data):
+        """Highlight is CAEDFB (was DAEEF3). Applied to race value cols B, E, H."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
-        # Column 2 data cells should have the highlight fill
-        for r in range(5, 8):
-            cell = ws.cell(row=r, column=2)
-            assert cell.fill.start_color.rgb == "00DAEEF3", (
-                f"Row {r} col 2 should have highlight fill"
+        for col in (2, 5, 8):
+            cell = ws.cell(row=5, column=col)
+            assert cell.fill.start_color.rgb == "00CAEDFB", (
+                f"Col {col} row 5 should have highlight fill CAEDFB"
             )
 
 
@@ -270,17 +294,17 @@ class TestAddChartSetAIntegration:
         data = builder.save_bytes()
         loaded = openpyxl.load_workbook(io.BytesIO(data))
         ws = loaded["OUTPUT-1"]
-        # Check the first data table values survive the round-trip
+        # Check WIDE data row values survive the round-trip (row 5, cols B-J)
         assert ws.cell(row=5, column=2).value == 110.5
-        assert ws.cell(row=6, column=2).value == 87.9
-        assert ws.cell(row=7, column=2).value == 141.1
+        assert ws.cell(row=5, column=5).value == 87.9
+        assert ws.cell(row=5, column=8).value == 141.1
 
     def test_all_three_race_blocks_have_data(self, builder, data_list):
         builder.add_chart_set_a(data_list)
         ws = builder.wb["OUTPUT-1"]
         # Verify each race name appears somewhere in the sheet
         all_values = []
-        for row in ws.iter_rows(min_row=1, max_row=100, min_col=1, max_col=4, values_only=True):
+        for row in ws.iter_rows(min_row=1, max_row=100, min_col=1, max_col=10, values_only=True):
             all_values.extend([str(v) for v in row if v is not None])
         joined = " ".join(all_values)
         assert "Asian" in joined
@@ -295,23 +319,14 @@ class TestAddChartSetAIntegration:
 class TestChartColours:
     """Verify series fill colours are set correctly."""
 
-    def test_first_series_green(self, config, asian_data):
+    def test_single_series_has_fill(self, config, asian_data):
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
         chart = ws._charts[0]
+        assert len(chart.series) == 1
         fill = chart.series[0].graphicalProperties.solidFill
         assert fill is not None
-
-    def test_all_three_series_have_fills(self, config, asian_data):
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        build_chart_set_a_sheet(ws, [asian_data], config)
-        chart = ws._charts[0]
-        for i, series in enumerate(chart.series):
-            assert series.graphicalProperties.solidFill is not None, (
-                f"Series {i} should have a solid fill"
-            )
 
     def test_chart_has_no_legend(self, config, asian_data):
         wb = openpyxl.Workbook()

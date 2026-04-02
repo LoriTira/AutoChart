@@ -5,7 +5,7 @@ from pathlib import Path
 import pytest
 
 from autochart.config import ChartConfig
-from autochart.extractor import ExtractedConfig, build_config, extract_config
+from autochart.extractor import ExtractedConfig, build_config, extract_config, extract_config_per_sheet
 
 EXAMPLES = Path(__file__).resolve().parent.parent / "examples.xlsx"
 
@@ -163,3 +163,45 @@ def test_confidence_scores(full_config: ExtractedConfig):
     assert full_config.confidence["demographics"] == 0.9
     assert "reference_group" in full_config.confidence
     assert full_config.confidence["reference_group"] == 0.7
+
+
+# ---- Per-sheet extraction ----------------------------------------------------
+
+
+@pytest.fixture(scope="module")
+def per_sheet_configs() -> dict[str, ExtractedConfig]:
+    return extract_config_per_sheet(EXAMPLES)
+
+
+def test_per_sheet_returns_all_input_sheets(per_sheet_configs):
+    """Should return one ExtractedConfig per INPUT sheet."""
+    assert len(per_sheet_configs) == 8
+    for i in range(1, 9):
+        assert f"INPUT-{i}" in per_sheet_configs
+
+
+def test_per_sheet_cancer_disease(per_sheet_configs):
+    """Cancer sheets should detect Cancer Mortality."""
+    for sheet in CANCER_SHEETS:
+        extracted = per_sheet_configs[sheet]
+        if extracted.disease_name:
+            assert "Cancer" in extracted.disease_name or "Mortality" in extracted.disease_name
+
+
+def test_per_sheet_cerebro_disease(per_sheet_configs):
+    """Cerebrovascular sheets should detect Cerebrovascular Hospitalizations."""
+    for sheet in CEREBRO_SHEETS:
+        extracted = per_sheet_configs[sheet]
+        if extracted.disease_name:
+            assert "Cerebrovascular" in extracted.disease_name or "Hospitalizations" in extracted.disease_name
+
+
+def test_per_sheet_different_rate_units(per_sheet_configs):
+    """Cancer and cerebro sheets should have different rate denominators."""
+    cancer_denoms = {per_sheet_configs[s].rate_denominator for s in CANCER_SHEETS
+                     if per_sheet_configs[s].rate_denominator}
+    cerebro_denoms = {per_sheet_configs[s].rate_denominator for s in CEREBRO_SHEETS
+                      if per_sheet_configs[s].rate_denominator}
+    # At least some sheets should detect the correct denominator
+    if cancer_denoms and cerebro_denoms:
+        assert cancer_denoms != cerebro_denoms

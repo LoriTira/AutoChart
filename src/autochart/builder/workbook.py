@@ -70,55 +70,84 @@ class WorkbookBuilder:
     # Chart-set stubs (to be implemented in Steps 4-6)
     # ------------------------------------------------------------------
 
-    def add_chart_set_a(self, data_list: list[ChartSetAData]) -> None:
-        """Add Chart Set A sheet with 3 race charts.
+    def _unique_sheet_name(self, base: str) -> str:
+        """Return *base* if it doesn't exist yet, otherwise append ``_2``, ``_3``, etc."""
+        if base not in self.wb.sheetnames:
+            return base
+        i = 2
+        while f"{base}_{i}" in self.wb.sheetnames:
+            i += 1
+        return f"{base}_{i}"
+
+    def add_chart_set_a(
+        self, data_list: list[ChartSetAData], config: ChartConfig | None = None,
+    ) -> None:
+        """Add Chart Set A sheet with race charts.
 
         Each item in *data_list* represents one race group compared
         against the rest of Boston.
+
+        Parameters
+        ----------
+        config:
+            Optional per-sheet config override.  Falls back to ``self.config``.
         """
         if not data_list:
             return
-        ws = self.wb.create_sheet("OUTPUT-1")
+        cfg = config or self.config
+        ws = self.wb.create_sheet(self._unique_sheet_name("OUTPUT-1"))
         from autochart.charts.chart_set_a import build_chart_set_a_sheet
-        build_chart_set_a_sheet(ws, data_list, self.config)
+        build_chart_set_a_sheet(ws, data_list, cfg)
 
-    def add_chart_set_b(self, data_list: list[ChartSetBData]) -> None:
-        """Add Chart Set B sheet with 3 race charts.
+    def add_chart_set_b(
+        self, data_list: list[ChartSetBData], config: ChartConfig | None = None,
+    ) -> None:
+        """Add Chart Set B sheet with race charts.
 
         Each item in *data_list* represents one race group compared
         against White.
+
+        Parameters
+        ----------
+        config:
+            Optional per-sheet config override.  Falls back to ``self.config``.
         """
         if not data_list:
             return
-        ws = self.wb.create_sheet("OUTPUT-2")
+        cfg = config or self.config
+        ws = self.wb.create_sheet(self._unique_sheet_name("OUTPUT-2"))
         from autochart.charts.chart_set_b import build_chart_set_b_sheet
-        build_chart_set_b_sheet(ws, data_list, self.config)
+        build_chart_set_b_sheet(ws, data_list, cfg)
 
-    def add_chart_set_c(self, data: ChartSetCData) -> None:
-        """Add Chart Set C sheet with combined comparison chart."""
-        sheet_name = "OUTPUT-3"
-        # If OUTPUT-3 already exists, append a suffix
-        if sheet_name in self.wb.sheetnames:
-            i = 2
-            while f"{sheet_name}_{i}" in self.wb.sheetnames:
-                i += 1
-            sheet_name = f"{sheet_name}_{i}"
-        ws = self.wb.create_sheet(sheet_name)
+    def add_chart_set_c(
+        self, data: ChartSetCData, config: ChartConfig | None = None,
+    ) -> None:
+        """Add Chart Set C sheet with combined comparison chart.
+
+        Parameters
+        ----------
+        config:
+            Optional per-sheet config override.  Falls back to ``self.config``.
+        """
+        cfg = config or self.config
+        ws = self.wb.create_sheet(self._unique_sheet_name("OUTPUT-3"))
         from autochart.charts.chart_set_c import build_chart_set_c_sheet
-        build_chart_set_c_sheet(ws, data, self.config)
+        build_chart_set_c_sheet(ws, data, cfg)
 
-    def add_part_3(self, data: Part3Data) -> None:
-        """Add Part 3 sheet with gender x race chart."""
-        sheet_name = "OUTPUT-4"
-        # If OUTPUT-4 already exists, append a suffix
-        if sheet_name in self.wb.sheetnames:
-            i = 2
-            while f"{sheet_name}_{i}" in self.wb.sheetnames:
-                i += 1
-            sheet_name = f"{sheet_name}_{i}"
-        ws = self.wb.create_sheet(sheet_name)
+    def add_part_3(
+        self, data: Part3Data, config: ChartConfig | None = None,
+    ) -> None:
+        """Add Part 3 sheet with gender x race chart.
+
+        Parameters
+        ----------
+        config:
+            Optional per-sheet config override.  Falls back to ``self.config``.
+        """
+        cfg = config or self.config
+        ws = self.wb.create_sheet(self._unique_sheet_name("OUTPUT-4"))
         from autochart.charts.part_3 import build_part_3_sheet
-        build_part_3_sheet(ws, data, self.config)
+        build_part_3_sheet(ws, data, cfg)
 
     # ------------------------------------------------------------------
     # Persistence
