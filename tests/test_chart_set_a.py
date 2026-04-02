@@ -110,7 +110,7 @@ class TestBuildChartSetASheet:
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
-        assert ws.cell(row=1, column=1).value == "Chart Set A: Race vs Boston overall and Rest of Boston"
+        assert ws.cell(row=1, column=1).value == "Chart Set A: Race vs Boston overall and Rest of Boston\xa0"
 
     def test_merged_group_headers(self, config, asian_data):
         """First race block starts at row 3 with merged headers: Boston, Female, Male."""
@@ -164,11 +164,11 @@ class TestBuildChartSetASheet:
         assert ws.cell(row=5, column=10).value == 150.8  # Male Overall
 
     def test_chart_title_below_data(self, config, asian_data):
-        """Chart title is 2 rows below data row (row 7)."""
+        """Chart title is 3 rows below data row (row 8)."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_a_sheet(ws, [asian_data], config)
-        title_val = str(ws.cell(row=7, column=1).value)
+        title_val = str(ws.cell(row=8, column=1).value)
         assert "Asian" in title_val
         assert "2017-2023" in title_val
 

@@ -43,7 +43,7 @@ _SHEET_TITLE_FONT = Font(name="Calibri", size=11, bold=True)
 
 _CHART_WIDTH = 15
 _CHART_HEIGHT = 7.5
-_CHART_ROWS = 16  # approximate rows a chart occupies
+_BLOCK_SPACINGS = [30, 28]  # rows between blocks (3→33=30, 33→61=28)
 
 
 def build_chart_set_a_sheet(
@@ -64,15 +64,19 @@ def build_chart_set_a_sheet(
 
     # Row 1: Sheet title
     cell = ws.cell(row=1, column=1,
-                   value="Chart Set A: Race vs Boston overall and Rest of Boston")
+                   value="Chart Set A: Race vs Boston overall and Rest of Boston\xa0")
     cell.font = _SHEET_TITLE_FONT
     cell.alignment = Alignment(horizontal="left")
 
-    current_row = 3  # start first block at row 3
+    # Block start rows matching example: 3, 33, 61 (spacing 30, 28)
+    block_starts = [3]
+    for i in range(1, len(data_list)):
+        spacing = _BLOCK_SPACINGS[min(i - 1, len(_BLOCK_SPACINGS) - 1)]
+        block_starts.append(block_starts[-1] + spacing)
 
-    for race_data in data_list:
-        current_row = _build_race_block(ws, race_data, config, text_gen, current_row)
-        current_row += 2  # spacing between blocks
+    for idx, race_data in enumerate(data_list):
+        _build_race_block(ws, race_data, config, text_gen, block_starts[idx],
+                          title_gap=3 if idx == 0 else 2)
 
 
 def _build_race_block(
@@ -81,8 +85,9 @@ def _build_race_block(
     config: ChartConfig,
     text_gen: TextGenerator,
     start_row: int,
-) -> int:
-    """Build one race block and return the next available row."""
+    title_gap: int = 3,
+) -> None:
+    """Build one race block."""
     row = start_row
 
     # 1. Merged group headers (Boston, Female, Male) spanning 3 cols each
@@ -135,8 +140,8 @@ def _build_race_block(
         if col in (2, 5, 8):
             cell.fill = _HIGHLIGHT_FILL
 
-    # 4. Chart title (2 rows below data)
-    title_row = data_row + 2
+    # 4. Chart title (title_gap rows below data)
+    title_row = data_row + title_gap
     ws.row_dimensions[title_row].height = 17.0
     title = text_gen.chart_title(ChartSetType.A, race_name=data.race_name)
     cell = ws.cell(row=title_row, column=1, value=title)
@@ -176,5 +181,3 @@ def _build_race_block(
 
     chart_anchor = f"A{title_row + 1}"
     ws.add_chart(chart, chart_anchor)
-
-    return title_row + 1 + _CHART_ROWS

@@ -77,7 +77,7 @@ class TestBuildPart3Sheet:
         wb = openpyxl.Workbook()
         ws = wb.active
         build_part_3_sheet(ws, part_3_data, config)
-        assert ws.cell(row=1, column=1).value == "Part 3: Sex- and Race-Stratified Charts"
+        assert ws.cell(row=1, column=1).value == "Part 3: Sex- and Race-Stratified Charts\xa0"
 
     def test_merged_group_headers(self, config, part_3_data):
         """Row 3: merged Female (B:F) and Male (G:K) headers."""

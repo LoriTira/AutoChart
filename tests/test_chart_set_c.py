@@ -71,36 +71,36 @@ class TestBuildChartSetCSheet:
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_c_sheet(ws, chart_set_c_data, config)
-        assert ws.cell(row=1, column=1).value == "Chart Set C: Combined race comparison chart"
+        assert ws.cell(row=1, column=1).value == "Chart Set C: Combined race comparison chart\xa0"
 
-    def test_header_row_at_12(self, config, chart_set_c_data):
-        """WIDE format: headers at row 12 across 5 columns (A-E)."""
+    def test_header_row_at_13(self, config, chart_set_c_data):
+        """WIDE format: headers at row 13 across 5 columns (A-E)."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_c_sheet(ws, chart_set_c_data, config)
-        assert ws.cell(row=12, column=1).value == "Asian"
-        assert ws.cell(row=12, column=2).value == "Black"
-        assert ws.cell(row=12, column=3).value == "Latinx"
-        assert ws.cell(row=12, column=4).value == "White"
-        assert ws.cell(row=12, column=5).value == "Boston"
+        assert ws.cell(row=13, column=1).value == "Asian"
+        assert ws.cell(row=13, column=2).value == "Black"
+        assert ws.cell(row=13, column=3).value == "Latinx"
+        assert ws.cell(row=13, column=4).value == "White"
+        assert ws.cell(row=13, column=5).value == "Boston"
 
-    def test_data_row_at_13(self, config, chart_set_c_data):
-        """WIDE format: data row at row 13 with 5 values."""
+    def test_data_row_at_14(self, config, chart_set_c_data):
+        """WIDE format: data row at row 14 with 5 values."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_c_sheet(ws, chart_set_c_data, config)
-        assert ws.cell(row=13, column=1).value == 110.5  # Asian
-        assert ws.cell(row=13, column=2).value == 153.0  # Black
-        assert ws.cell(row=13, column=3).value == 99.5   # Latinx
-        assert ws.cell(row=13, column=4).value == 125.3  # White
-        assert ws.cell(row=13, column=5).value == 128.8  # Boston Overall
+        assert ws.cell(row=14, column=1).value == 110.5  # Asian
+        assert ws.cell(row=14, column=2).value == 153.0  # Black
+        assert ws.cell(row=14, column=3).value == 99.5   # Latinx
+        assert ws.cell(row=14, column=4).value == 125.3  # White
+        assert ws.cell(row=14, column=5).value == 128.8  # Boston Overall
 
     def test_chart_title_below_data(self, config, chart_set_c_data):
-        """Chart title is 2 rows below data (row 15)."""
+        """Chart title is 2 rows below data (row 16)."""
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_c_sheet(ws, chart_set_c_data, config)
-        title = str(ws.cell(row=15, column=1).value)
+        title = str(ws.cell(row=16, column=1).value)
         assert "by Race" in title or "2017-2023" in title
 
     def test_chart_created(self, config, chart_set_c_data):
@@ -217,9 +217,9 @@ class TestAddChartSetCIntegration:
         data = builder.save_bytes()
         loaded = openpyxl.load_workbook(io.BytesIO(data))
         ws = loaded["OUTPUT-3"]
-        # WIDE format: row 13 has data values
-        assert ws.cell(row=13, column=1).value == 110.5
-        assert ws.cell(row=13, column=2).value == 153.0
+        # WIDE format: row 14 has data values
+        assert ws.cell(row=14, column=1).value == 110.5
+        assert ws.cell(row=14, column=2).value == 153.0
 
     def test_multiple_calls_create_unique_sheets(self, builder, chart_set_c_data):
         builder.add_chart_set_c(chart_set_c_data)

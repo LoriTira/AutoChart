@@ -32,7 +32,7 @@ _SHEET_TITLE_FONT = Font(name="Calibri", size=11, bold=True)
 
 _CHART_WIDTH = 15
 _CHART_HEIGHT = 7.5
-_CHART_ROWS = 16
+_BLOCK_SPACING = 25  # rows per block (row 5 → 30 → 55)
 
 
 def build_chart_set_b_sheet(
@@ -54,15 +54,17 @@ def build_chart_set_b_sheet(
 
     # Row 1: Sheet title
     cell = ws.cell(row=1, column=1,
-                   value="Chart Set B: Race vs White residents (reference group)")
+                   value="Chart Set B: Race vs White residents (reference group)\xa0")
     cell.font = _SHEET_TITLE_FONT
     cell.alignment = Alignment(horizontal="left")
 
-    current_row = 5  # first block starts at row 5
-
-    for race_data in data_list:
-        current_row = _build_race_block(ws, race_data, config, text_gen, current_row)
-        current_row += 2
+    # Blocks at rows 5, 30, 55 (spacing 25)
+    for idx, race_data in enumerate(data_list):
+        start_row = 5 + idx * _BLOCK_SPACING
+        # Last block of 3+ has tighter title gap (1 instead of 2)
+        gap = 1 if idx == len(data_list) - 1 and len(data_list) >= 3 else 2
+        _build_race_block(ws, race_data, config, text_gen, start_row,
+                          title_gap=gap)
 
 
 def _build_race_block(
@@ -71,8 +73,9 @@ def _build_race_block(
     config: ChartConfig,
     text_gen: TextGenerator,
     start_row: int,
-) -> int:
-    """Build one race block and return the next available row."""
+    title_gap: int = 2,
+) -> None:
+    """Build one race block."""
     row = start_row
 
     # 1. Headers: Race, White, Boston (cols B, C, D)
@@ -92,8 +95,8 @@ def _build_race_block(
         cell = ws.cell(row=data_row, column=2 + i, value=val)
         cell.font = _DATA_FONT
 
-    # 3. Chart title (2 rows after data)
-    title_row = data_row + 2
+    # 3. Chart title
+    title_row = data_row + title_gap
     ws.row_dimensions[title_row].height = 17.0
     title = text_gen.chart_title(ChartSetType.B, race_name=data.race_name)
     cell = ws.cell(row=title_row, column=1, value=title)
@@ -128,5 +131,3 @@ def _build_race_block(
 
     chart_anchor = f"A{title_row + 1}"
     ws.add_chart(chart, chart_anchor)
-
-    return title_row + 1 + _CHART_ROWS

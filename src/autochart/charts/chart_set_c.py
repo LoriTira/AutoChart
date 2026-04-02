@@ -43,19 +43,38 @@ def build_chart_set_c_sheet(
     """Populate *ws* with Chart Set C content in WIDE format."""
     text_gen = TextGenerator(config)
 
+    _INTRO_FONT = Font(name="Calibri", size=11)
+
     # Row 1: Sheet title
     cell = ws.cell(row=1, column=1,
-                   value="Chart Set C: Combined race comparison chart")
+                   value="Chart Set C: Combined race comparison chart\xa0")
     cell.font = _SHEET_TITLE_FONT
     cell.alignment = Alignment(horizontal="left")
+
+    # Intro text (matching example OUTPUT-3 rows 2-10)
+    intro_lines = [
+        "Provide one chart including:\xa0",
+        "Bars for all race groups\xa0",
+        "Bar for Boston overall\xa0",
+        "Bar for White residents\xa0",
+        "Confidence intervals (if applicable)\xa0",
+        "Chart title\xa0",
+        "Axis labels\xa0",
+        "Notes/footnotes\xa0",
+        "Corresponding descriptive appendix text\xa0",
+    ]
+    for i, line in enumerate(intro_lines):
+        cell = ws.cell(row=2 + i, column=1, value=line)
+        cell.font = _INTRO_FONT
+        cell.alignment = Alignment(horizontal="left")
 
     # Build race names + reference group + geography
     race_names = [comp.group_name for comp in data.comparisons]
     all_labels = race_names + [config.reference_group, config.geography]
     num_cols = len(all_labels)
 
-    # Header row (start after some spacing)
-    header_row = 12
+    # Header row (matches example OUTPUT-3 position)
+    header_row = 13
     for i, label in enumerate(all_labels):
         col = 1 + i  # A=1, B=2, ...
         cell = ws.cell(row=header_row, column=col, value=label)

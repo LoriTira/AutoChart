@@ -52,7 +52,7 @@ def build_part_3_sheet(
 
     # Row 1: Sheet title
     cell = ws.cell(row=1, column=1,
-                   value="Part 3: Sex- and Race-Stratified Charts")
+                   value="Part 3: Sex- and Race-Stratified Charts\xa0")
     cell.font = _SHEET_TITLE_FONT
     cell.alignment = Alignment(horizontal="left")
 

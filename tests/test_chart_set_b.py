@@ -99,7 +99,7 @@ class TestBuildChartSetBSheet:
         wb = openpyxl.Workbook()
         ws = wb.active
         build_chart_set_b_sheet(ws, [asian_b_data], config)
-        assert ws.cell(row=1, column=1).value == "Chart Set B: Race vs White residents (reference group)"
+        assert ws.cell(row=1, column=1).value == "Chart Set B: Race vs White residents (reference group)\xa0"
 
     def test_first_block_starts_at_row_5(self, config, asian_b_data):
         """First block headers start at row 5."""
