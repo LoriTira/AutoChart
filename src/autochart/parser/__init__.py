@@ -95,7 +95,7 @@ def get_all_data_by_type(
 
 def auto_parse(
     path: Union[str, Path],
-    config_overrides: dict | None = None,
+    config_overrides: Union[dict, None] = None,
     sheet_prefix: str = "INPUT",
 ) -> tuple[ChartConfig, dict[ChartSetType, list]]:
     """Auto-detect config from input workbook and parse all sheets.
@@ -130,7 +130,7 @@ def auto_parse(
 
 def auto_parse_multi(
     path: Union[str, Path],
-    config_overrides: dict | None = None,
+    config_overrides: Union[dict, None] = None,
     sheet_prefix: str = "INPUT",
 ) -> list[SheetResult]:
     """Auto-detect per-sheet config and parse each INPUT sheet independently.
@@ -164,11 +164,11 @@ def auto_parse_multi(
     # Build per-disease fallbacks: group sheets by disease name and aggregate
     # values within each group so that e.g. Cancer sheets inherit rate_denom
     # from other Cancer sheets, not from Cerebro sheets.
-    disease_groups: dict[str | None, list[str]] = {}
+    disease_groups: dict[Union[str, None], list[str]] = {}
     for sn, ec in per_sheet.items():
         disease_groups.setdefault(ec.disease_name, []).append(sn)
 
-    disease_fallbacks: dict[str | None, ExtractedConfig] = {}
+    disease_fallbacks: dict[Union[str, None], ExtractedConfig] = {}
     for disease, sheet_names in disease_groups.items():
         disease_fallbacks[disease] = extract_config(str(path), sheets=sheet_names)
 

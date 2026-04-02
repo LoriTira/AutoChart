@@ -1,5 +1,7 @@
 """Text generator for AutoChart descriptive text and footnotes."""
 
+from typing import Optional
+
 from autochart.config import (
     ChartConfig,
     ChartSetAData,
@@ -62,7 +64,7 @@ class TextGenerator:
         """Rate denominator formatted with commas (e.g. '100,000')."""
         return f"{self.config.rate_denominator:,}"
 
-    def chart_title(self, chart_type: ChartSetType, race_name: str | None = None) -> str:
+    def chart_title(self, chart_type: ChartSetType, race_name: Optional[str] = None) -> str:
         """Generate a chart title for the given chart type and optional race.
 
         Args:

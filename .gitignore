@@ -27,6 +27,7 @@ Thumbs.db
 output/
 *.xlsx
 !examples/examples.xlsx
+!src/autochart/templates/template.xlsx
 
 # Testing
 .pytest_cache/
