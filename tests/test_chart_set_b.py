@@ -201,7 +201,7 @@ class TestBuildChartSetBSheet:
         assert series.dLbls is not None
         assert series.dLbls.showVal is True
 
-    def test_no_descriptive_text(self, config, asian_b_data):
+    def test_descriptive_text_present(self, config, asian_b_data):
         """New format has no descriptive text."""
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -211,9 +211,9 @@ class TestBuildChartSetBSheet:
             if row[0] and "age-adjusted" in str(row[0]).lower():
                 found_descriptive = True
                 break
-        assert not found_descriptive, "Descriptive text should not be present in new format"
+        assert found_descriptive, "Descriptive text should be present"
 
-    def test_no_footnote(self, config, asian_b_data):
+    def test_footnote_present(self, config, asian_b_data):
         """New format has no footnotes."""
         wb = openpyxl.Workbook()
         ws = wb.active
@@ -223,7 +223,7 @@ class TestBuildChartSetBSheet:
             if row[0] and "DATA SOURCE" in str(row[0]):
                 found_footnote = True
                 break
-        assert not found_footnote, "Footnote should not be present in new format"
+        assert found_footnote, "Footnote should be present"
 
     def test_chart_has_no_legend(self, config, asian_b_data):
         wb = openpyxl.Workbook()

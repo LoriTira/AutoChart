@@ -126,9 +126,31 @@ def build_chart_set_c_sheet(
     series.dLbls.showSerName = False
     series.dLbls.dLblPos = "outEnd"
 
-    chart.y_axis.title = f"Rate {config.rate_unit}"
+    chart.y_axis.title = f"Deaths {config.rate_unit}"
     chart.width = _CHART_WIDTH
     chart.height = _CHART_HEIGHT
 
     chart_anchor = f"A{title_row + 1}"
     ws.add_chart(chart, chart_anchor)
+
+    # Descriptive text
+    desc_row = title_row + 1 + 16
+    desc_text = text_gen.descriptive_text_set_c(data)
+    desc_cell = ws.cell(row=desc_row, column=1, value=desc_text)
+    desc_cell.font = Font(name="Calibri", size=10)
+    desc_cell.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.merge_cells(
+        start_row=desc_row, start_column=1,
+        end_row=desc_row, end_column=6,
+    )
+
+    # Footnote
+    footnote_row = desc_row + 2
+    footnote_text = text_gen.footnote()
+    fn_cell = ws.cell(row=footnote_row, column=1, value=footnote_text)
+    fn_cell.font = Font(name="Calibri", size=8, color="595959")
+    fn_cell.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.merge_cells(
+        start_row=footnote_row, start_column=1,
+        end_row=footnote_row + 1, end_column=6,
+    )

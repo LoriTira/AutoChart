@@ -1,21 +1,19 @@
-"""Chart Set A: Race vs Rest of Boston -- WIDE format.
+"""Chart Set A: Race vs Rest of Boston -- WIDE format with 3 bar colors.
 
 Each race block has a single data row with 9 values across 9 columns,
 organized into 3 groups (Boston, Female, Male) with merged headers.
-The chart uses a single series with multilevel categories.
-
-Layout per race block (e.g., Asian):
-  Row N:   [merged: Boston]  [merged: Female]  [merged: Male]
-  Row N+1: Asian | Rest of Boston | Boston Overall  (×3)
-  Row N+2: 110.5 | 130.6 | 128.8 | 87.9 | 113.5 | 111.1 | 141.2 | 156.1 | 154.9
-  Row N+4: Chart title
-  (chart placed below)
+The chart uses a single series with per-data-point coloring:
+  - Race bars (0, 3, 6): green
+  - Rest of Boston bars (1, 4, 7): blue
+  - Boston Overall bars (2, 5, 8): navy
 """
 
 from __future__ import annotations
 
 from openpyxl.chart import BarChart, Reference
 from openpyxl.chart.label import DataLabelList
+from openpyxl.chart.series import DataPoint
+from openpyxl.drawing.fill import PatternFillProperties, ColorChoice
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -91,9 +89,8 @@ def _build_race_block(
     row = start_row
 
     # 1. Merged group headers (Boston, Female, Male) spanning 3 cols each
-    # Columns: B-D = Boston, E-G = Female, H-J = Male
     groups = ["Boston", "Female", "Male"]
-    col_starts = [2, 5, 8]  # B=2, E=5, H=8
+    col_starts = [2, 5, 8]
 
     for group_name, col_start in zip(groups, col_starts):
         cell = ws.cell(row=row, column=col_start, value=group_name)
@@ -120,11 +117,9 @@ def _build_race_block(
     data_row = sub_row + 1
     ws.row_dimensions[data_row].height = 16.0
 
-    # Label in column A
     cell = ws.cell(row=data_row, column=1, value=f"All {config.disease_name}")
     cell.font = _LABEL_FONT
 
-    # 9 data values: [race, rest, overall] × [Boston, Female, Male]
     values = [
         data.boston.group_rate, data.boston.reference_rate, data.boston_overall_rate,
         data.female.group_rate, data.female.reference_rate, data.female_overall_rate,
@@ -132,22 +127,21 @@ def _build_race_block(
     ]
 
     for i, val in enumerate(values):
-        col = 2 + i  # B=2 through J=10
+        col = 2 + i
         cell = ws.cell(row=data_row, column=col, value=val)
         cell.font = _DATA_FONT
         cell.alignment = _DATA_ALIGN
-        # Highlight first column of each group (race values) — cols B, E, H
         if col in (2, 5, 8):
             cell.fill = _HIGHLIGHT_FILL
 
-    # 4. Chart title (title_gap rows below data)
+    # 4. Chart title
     title_row = data_row + title_gap
     ws.row_dimensions[title_row].height = 17.0
     title = text_gen.chart_title(ChartSetType.A, race_name=data.race_name)
     cell = ws.cell(row=title_row, column=1, value=title)
     cell.font = _TITLE_FONT
 
-    # 5. Chart: single series from data row, multilevel categories from headers
+    # 5. Chart
     chart = BarChart()
     chart.type = "col"
     chart.grouping = "clustered"
@@ -156,17 +150,35 @@ def _build_race_block(
     chart.legend = None
     chart.title = None
 
-    # Data: single row B{data_row}:J{data_row}
     vals = Reference(ws, min_col=2, max_col=10, min_row=data_row, max_row=data_row)
     chart.add_data(vals, from_rows=True, titles_from_data=False)
 
-    # Categories: multilevel from merged headers + sub-headers
     cats = Reference(ws, min_col=2, max_col=10, min_row=row, max_row=sub_row)
     chart.set_categories(cats)
 
-    # All bars navy (will be post-processed for individual colors)
+    # Default series fill = green (race color)
     series = chart.series[0]
-    series.graphicalProperties.solidFill = _strip_hash(config.colors.boston_overall)
+    series.graphicalProperties.solidFill = _strip_hash(config.colors.featured_race)
+    series.graphicalProperties.line.noFill = True
+
+    # Per-data-point colors: 0,3,6=green, 1,4,7=blue, 2,5,8=navy
+    color_map = {
+        0: config.colors.featured_race,    # race (Boston)
+        1: config.colors.rest_of_boston,    # rest (Boston)
+        2: config.colors.boston_overall,    # overall (Boston)
+        3: config.colors.featured_race,    # race (Female)
+        4: config.colors.rest_of_boston,    # rest (Female)
+        5: config.colors.boston_overall,    # overall (Female)
+        6: config.colors.featured_race,    # race (Male)
+        7: config.colors.rest_of_boston,    # rest (Male)
+        8: config.colors.boston_overall,    # overall (Male)
+    }
+
+    for pt_idx, color in color_map.items():
+        pt = DataPoint(idx=pt_idx)
+        pt.graphicalProperties.solidFill = _strip_hash(color)
+        pt.graphicalProperties.line.noFill = True
+        series.data_points.append(pt)
 
     # Data labels
     series.dLbls = DataLabelList()
@@ -175,9 +187,31 @@ def _build_race_block(
     series.dLbls.showSerName = False
     series.dLbls.dLblPos = "outEnd"
 
-    chart.y_axis.title = f"Rate {config.rate_unit}"
+    chart.y_axis.title = f"Deaths {config.rate_unit}"
     chart.width = _CHART_WIDTH
     chart.height = _CHART_HEIGHT
 
     chart_anchor = f"A{title_row + 1}"
     ws.add_chart(chart, chart_anchor)
+
+    # 6. Descriptive text (below chart as merged cell text)
+    desc_row = title_row + 1 + 16  # chart occupies ~16 rows
+    desc_text = text_gen.descriptive_text_set_a(data)
+    desc_cell = ws.cell(row=desc_row, column=1, value=desc_text)
+    desc_cell.font = Font(name="Calibri", size=10)
+    desc_cell.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.merge_cells(
+        start_row=desc_row, start_column=1,
+        end_row=desc_row, end_column=6,
+    )
+
+    # 7. Footnote
+    footnote_row = desc_row + 2
+    footnote_text = text_gen.footnote()
+    fn_cell = ws.cell(row=footnote_row, column=1, value=footnote_text)
+    fn_cell.font = Font(name="Calibri", size=8, color="595959")
+    fn_cell.alignment = Alignment(wrap_text=True, vertical="top")
+    ws.merge_cells(
+        start_row=footnote_row, start_column=1,
+        end_row=footnote_row + 1, end_column=6,
+    )
