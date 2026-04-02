@@ -176,41 +176,68 @@ if uploaded_file is not None:
             parsed_names = [sr.sheet_name for sr in sheet_results]
             st.success(f"Found {len(parsed_names)} input sheet(s): {', '.join(parsed_names)}")
 
-        # --- Template Picker (visual grid) ---
-        st.subheader("Choose Chart Templates")
+        # --- Per-Table Template Picker ---
+        st.subheader("Assign Templates to Tables")
 
-        # Aggregate all data types across all sheets for template availability
-        all_by_type: dict[ChartSetType, list] = {}
+        from autochart.builder.template_builder import (
+            COMPATIBLE_TEMPLATES, TableAssignment,
+        )
+
+        # Build list of tables: (disease_name, chart_type, config, data_list)
+        # Aggregate across sheets by (disease, chart_type)
+        table_list: list[tuple[str, ChartSetType, ChartConfig, list]] = []
+        seen_tables: set[tuple[str, str]] = set()
         for sr in sheet_results:
-            for ct, data in sr.by_type.items():
-                all_by_type.setdefault(ct, []).extend(data)
+            for ct, data_list in sr.by_type.items():
+                key = (sr.config.disease_name, ct.value)
+                if key not in seen_tables:
+                    seen_tables.add(key)
+                    table_list.append((sr.config.disease_name, ct, sr.config, data_list))
+                else:
+                    # Append data to existing table entry
+                    for tbl in table_list:
+                        if tbl[0] == sr.config.disease_name and tbl[1] == ct:
+                            tbl[3].extend(data_list)
+                            break
 
-        templates_with_data = get_templates_for_data(all_by_type)
-        selected_templates = []
+        # Use mutable lists so we can extend
+        table_entries: list[dict] = []
+        for disease_name, ct, config, data_list in table_list:
+            table_entries.append({
+                "disease": disease_name,
+                "chart_type": ct,
+                "config": config,
+                "data": list(data_list),
+            })
 
-        cols = st.columns(2)
-        for i, (template, has_data) in enumerate(templates_with_data):
-            with cols[i % 2]:
-                with st.container(border=True):
-                    st.markdown(template.preview_svg, unsafe_allow_html=True)
-                    st.markdown(f"**{template.name}**")
-                    st.caption(template.description)
-                    st.caption(f"\U0001f4ca {template.bar_count_label}")
+        # Show each table with template dropdown
+        user_assignments: list[dict] = []
 
-                    if has_data:
-                        checked = st.checkbox(
-                            "Include", value=True, key=f"tmpl_{template.id}",
-                        )
-                        if checked:
-                            selected_templates.append(template)
-                    else:
-                        st.checkbox("Include", value=False, disabled=True, key=f"tmpl_{template.id}")
-                        st.caption("\u26a0\ufe0f No matching data in input")
+        for idx, tbl in enumerate(table_entries):
+            ct = tbl["chart_type"]
+            compatible = COMPATIBLE_TEMPLATES[ct]
+
+            with st.container(border=True):
+                col1, col2 = st.columns([2, 1])
+                with col1:
+                    st.markdown(f"**{tbl['disease']}** — {ct.label}")
+                    st.caption(f"Source data: {len(tbl['data'])} item(s)")
+                with col2:
+                    selected = st.selectbox(
+                        "Template",
+                        compatible,
+                        key=f"tpl_assign_{idx}",
+                        label_visibility="collapsed",
+                    )
+                user_assignments.append({
+                    **tbl,
+                    "template": selected,
+                })
 
         # --- Generate ---
         st.divider()
 
-        # Check if all disease groups have required fields
+        # Check required fields
         missing_fields = []
         for disease_label, sheet_names in disease_groups.items():
             cfg = sheet_configs.get(sheet_names[0], {})
@@ -219,7 +246,7 @@ if uploaded_file is not None:
             if not cfg.get("years"):
                 missing_fields.append(f"{disease_label}: years")
 
-        can_generate = bool(selected_templates) and bool(sheet_results) and not missing_fields
+        can_generate = bool(user_assignments) and bool(sheet_results) and not missing_fields
 
         for mf in missing_fields:
             st.warning(f"Missing: {mf}. Please enter it in the sidebar.")
@@ -232,50 +259,60 @@ if uploaded_file is not None:
         if generate_clicked and can_generate:
             st.session_state.output_bytes = None
 
-            # Build per-sheet configs from sidebar values
-            final_sheet_results: list[SheetResult] = []
-            for sr in sheet_results:
-                cfg_overrides = sheet_configs.get(sr.sheet_name, {})
-                config = ChartConfig(
-                    disease_name=cfg_overrides.get("disease_name", sr.config.disease_name),
-                    rate_unit=cfg_overrides.get("rate_unit", sr.config.rate_unit),
-                    rate_denominator=int(cfg_overrides.get("rate_denominator", sr.config.rate_denominator)),
-                    data_source=cfg_overrides.get("data_source", sr.config.data_source),
-                    years=cfg_overrides.get("years", sr.config.years),
-                    demographics=cfg_overrides.get("demographics", sr.config.demographics),
-                    reference_group=cfg_overrides.get("reference_group", sr.config.reference_group),
-                    geography=cfg_overrides.get("geography", sr.config.geography),
-                    significance_threshold=significance_threshold,
-                    colors=ColorScheme(
-                        featured_race=col_featured,
-                        rest_of_boston=col_rest,
-                        boston_overall=col_overall,
-                    ),
-                )
-                final_sheet_results.append(SheetResult(
-                    sheet_name=sr.sheet_name,
-                    config=config,
-                    by_type=sr.by_type,
-                ))
+            # Build TableAssignment objects from user selections
+            from autochart.builder.template_builder import TemplateBuilder
 
-            requested_types = [t.chart_set_type for t in selected_templates]
+            assignments: list[TableAssignment] = []
+            for ua in user_assignments:
+                # Apply sidebar config overrides
+                cfg = ua["config"]
+                override = sheet_configs.get(
+                    next((sn for sn, _ in per_sheet_extracted.items()
+                          if per_sheet_extracted[sn].disease_name == ua["disease"]), ""),
+                    {},
+                )
+                if override:
+                    cfg = ChartConfig(
+                        disease_name=override.get("disease_name", cfg.disease_name),
+                        rate_unit=override.get("rate_unit", cfg.rate_unit),
+                        rate_denominator=int(override.get("rate_denominator", cfg.rate_denominator)),
+                        data_source=override.get("data_source", cfg.data_source),
+                        years=override.get("years", cfg.years),
+                        demographics=override.get("demographics", cfg.demographics),
+                        reference_group=override.get("reference_group", cfg.reference_group),
+                        geography=override.get("geography", cfg.geography),
+                        significance_threshold=significance_threshold,
+                        colors=ColorScheme(
+                            featured_race=col_featured,
+                            rest_of_boston=col_rest,
+                            boston_overall=col_overall,
+                        ),
+                    )
+
+                # Keep ≤31 chars for Excel
+                short_d = ua["disease"][:20]
+                short_t = {"A": "SetA", "B": "SetB", "C": "SetC", "PART_3": "Part3"}[ua["chart_type"].value]
+                output_name = f"{short_d}-{short_t}"
+                assignments.append(TableAssignment(
+                    template_sheet=ua["template"],
+                    output_name=output_name,
+                    chart_type=ua["chart_type"],
+                    data_list=ua["data"],
+                    config=cfg,
+                ))
 
             progress = st.progress(0, text="Building charts from template...")
 
             try:
-                from autochart.builder.template_builder import TemplateBuilder
-                progress.progress(30, text="Filling template with data...")
-
                 tbuilder = TemplateBuilder()
-                output_bytes = tbuilder.build(final_sheet_results, requested_types)
+                progress.progress(30, text="Filling templates with data...")
+
+                output_bytes = tbuilder.build(assignments)
 
                 st.session_state.output_bytes = output_bytes
                 progress.progress(100, text="Done!")
 
-                st.success(
-                    f"Generated {len(charts_generated)} chart template(s): "
-                    + ", ".join(charts_generated)
-                )
+                st.success(f"Generated {len(assignments)} chart sheet(s)!")
 
             except Exception as e:
                 st.error(f"Generation failed: {e}")

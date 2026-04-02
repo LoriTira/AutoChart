@@ -472,7 +472,7 @@ def _run_generate(args: argparse.Namespace) -> None:
 
     from autochart.builder.template_builder import TemplateBuilder
     tbuilder = TemplateBuilder()
-    output_bytes = tbuilder.build(sheet_results, requested_types)
+    output_bytes = tbuilder.build_auto(sheet_results, requested_types)
 
     output_path = args.output
     print(f"Saving output to: {output_path}")
