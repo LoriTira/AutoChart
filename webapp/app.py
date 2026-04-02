@@ -260,51 +260,16 @@ if uploaded_file is not None:
 
             requested_types = [t.chart_set_type for t in selected_templates]
 
-            progress = st.progress(0, text="Building charts...")
+            progress = st.progress(0, text="Building charts from template...")
 
             try:
-                builder = WorkbookBuilder(final_sheet_results[0].config)
-                charts_generated = []
-                total_steps = sum(
-                    1 for sr in final_sheet_results
-                    for ct in requested_types if ct in sr.by_type
-                )
-                step = 0
+                from autochart.builder.template_builder import TemplateBuilder
+                progress.progress(30, text="Filling template with data...")
 
-                for sr in final_sheet_results:
-                    for chart_type in requested_types:
-                        if chart_type not in sr.by_type:
-                            continue
-                        tmpl = get_template_by_type(chart_type)
+                tbuilder = TemplateBuilder()
+                output_bytes = tbuilder.build(final_sheet_results, requested_types)
 
-                        if chart_type == ChartSetType.A:
-                            builder.add_chart_set_a(sr.by_type[chart_type], config=sr.config)
-                        elif chart_type == ChartSetType.B:
-                            builder.add_chart_set_b(sr.by_type[chart_type], config=sr.config)
-                        elif chart_type == ChartSetType.C:
-                            for c_data in sr.by_type[chart_type]:
-                                builder.add_chart_set_c(c_data, config=sr.config)
-                        elif chart_type == ChartSetType.PART_3:
-                            for p3_data in sr.by_type[chart_type]:
-                                builder.add_part_3(p3_data, config=sr.config)
-
-                        charts_generated.append(
-                            f"{tmpl.name} [{sr.config.disease_name}]"
-                        )
-                        step += 1
-                        progress.progress(
-                            min(int(step / max(total_steps, 1) * 70), 70),
-                            text=f"Built {tmpl.name} for {sr.config.disease_name}...",
-                        )
-
-                progress.progress(80, text="Applying formatting (fonts, patterns, asterisks)...")
-                chart_patches = _compute_chart_patches_multi(
-                    final_sheet_results, requested_types,
-                )
-                raw_bytes = builder.save_bytes()
-                processed = postprocess_xlsx(raw_bytes, chart_patches)
-
-                st.session_state.output_bytes = processed
+                st.session_state.output_bytes = output_bytes
                 progress.progress(100, text="Done!")
 
                 st.success(

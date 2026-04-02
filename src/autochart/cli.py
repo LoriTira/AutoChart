@@ -462,58 +462,22 @@ def _run_generate(args: argparse.Namespace) -> None:
             by_type=by_type,
         )]
 
-    # Build workbook using per-sheet configs
+    # Build workbook using template-based approach
     print(f"Parsing input file: {input_path}")
-
-    # Use first config as default for WorkbookBuilder (used only for defaults)
-    builder = WorkbookBuilder(sheet_results[0].config)
-    charts_generated: list[str] = []
 
     for sr in sheet_results:
         available_types = list(sr.by_type.keys())
         if available_types:
             print(f"  {sr.sheet_name}: {', '.join(t.label for t in available_types)}")
 
-        for chart_type in requested_types:
-            if chart_type not in sr.by_type:
-                continue
-            if chart_type == ChartSetType.A:
-                builder.add_chart_set_a(sr.by_type[chart_type], config=sr.config)
-                charts_generated.append(
-                    f"{chart_type.label} ({len(sr.by_type[chart_type])} chart(s)) "
-                    f"[{sr.config.disease_name}]"
-                )
-            elif chart_type == ChartSetType.B:
-                builder.add_chart_set_b(sr.by_type[chart_type], config=sr.config)
-                charts_generated.append(
-                    f"{chart_type.label} ({len(sr.by_type[chart_type])} chart(s)) "
-                    f"[{sr.config.disease_name}]"
-                )
-            elif chart_type == ChartSetType.C:
-                for c_data in sr.by_type[chart_type]:
-                    builder.add_chart_set_c(c_data, config=sr.config)
-                charts_generated.append(
-                    f"{chart_type.label} (1 chart) [{sr.config.disease_name}]"
-                )
-            elif chart_type == ChartSetType.PART_3:
-                for p3_data in sr.by_type[chart_type]:
-                    builder.add_part_3(p3_data, config=sr.config)
-                charts_generated.append(
-                    f"{chart_type.label} (1 chart) [{sr.config.disease_name}]"
-                )
+    from autochart.builder.template_builder import TemplateBuilder
+    tbuilder = TemplateBuilder()
+    output_bytes = tbuilder.build(sheet_results, requested_types)
 
-    if not charts_generated:
-        print("Error: No charts could be generated.", file=sys.stderr)
-        sys.exit(1)
-
-    chart_patches = _compute_chart_patches_multi(sheet_results, requested_types)
     output_path = args.output
     print(f"Saving output to: {output_path}")
-    builder.save_with_postprocess(output_path, chart_patches)
+    with open(output_path, "wb") as f:
+        f.write(output_bytes)
 
     print("\nGeneration complete!")
-    print(f"  Charts generated:")
-    for desc in charts_generated:
-        print(f"    - {desc}")
-    print(f"  Post-processing patches: {len(chart_patches)}")
     print(f"  Output: {output_path}")
