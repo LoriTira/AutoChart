@@ -86,13 +86,14 @@ class TestComparisonWord:
         assert _comparison_word(comp, 0.05) == "similar"
 
     def test_no_p_value(self):
+        """When no p-value available, fall back to rate direction."""
         comp = RateComparison(
             group_name="Asian",
             group_rate=110.5,
             reference_name="White",
             reference_rate=131.2,
         )
-        assert _comparison_word(comp, 0.05) == "similar"
+        assert _comparison_word(comp, 0.05) == "lower"
 
     def test_p_value_exactly_threshold(self):
         comp = RateComparison(

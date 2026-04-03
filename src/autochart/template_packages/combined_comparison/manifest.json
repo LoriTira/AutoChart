@@ -1,0 +1,34 @@
+{
+  "id": "combined_comparison",
+  "name": "All Races Combined",
+  "description": "Shows all racial/ethnic groups side by side in a single chart for direct comparison, with the reference group bar using a pattern fill.",
+  "chart_set_type": "C",
+  "input_format": "sas_race_vs_white",
+  "sheet_name": "OUTPUT-3",
+  "blocks": [
+    {
+      "index": 0,
+      "header_cells": ["A13", "B13", "C13", "D13", "E13"],
+      "data_cells": ["A14", "B14", "C14", "D14", "E14"],
+      "title_cell": "A16",
+      "chart_index": 1,
+      "pattern_fill_points": [3],
+      "text_boxes": {
+        "description": {
+          "from_col": 8, "from_row": 17, "to_col": 11, "to_row": 26
+        },
+        "footnote": {
+          "from_col": 0, "from_row": 31, "to_col": 8, "to_row": 35
+        },
+        "chart": {
+          "from_col": 0, "from_row": 16, "to_col": 7, "to_row": 30
+        }
+      }
+    }
+  ],
+  "text_patterns": {
+    "title": "{disease}\u2020 by Race, {years}",
+    "description": "For the years {years}, the age-adjusted overall {disease_lower} rates for {lower_races_summary} were {comparison_summary} in comparison to the rate for {reference_lower} residents ({ref_rate}). The age-adjusted overall {disease_lower} rate for {geography} overall was {overall_rate}.",
+    "footnote": "\u2020 Age-adjusted rates {rate_unit}\n* Statistically significant difference when compared to reference group\nDATA SOURCE: {data_source}"
+  }
+}

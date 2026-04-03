@@ -53,10 +53,12 @@ def create_pattern_fill_xml() -> ET.Element:
     """
     patt_fill = ET.Element(_qn("a", "pattFill"), attrib={"prst": "wdDnDiag"})
 
-    # Foreground colour
+    # Foreground colour — must match the solid bar colour exactly
+    # tx2 + lumMod 25000 + lumOff 75000 = the same light blue as other bars
     fg_clr = ET.SubElement(patt_fill, _qn("a", "fgClr"))
     fg_scheme = ET.SubElement(fg_clr, _qn("a", "schemeClr"), attrib={"val": "tx2"})
     ET.SubElement(fg_scheme, _qn("a", "lumMod"), attrib={"val": "25000"})
+    ET.SubElement(fg_scheme, _qn("a", "lumOff"), attrib={"val": "75000"})
 
     # Background colour
     bg_clr = ET.SubElement(patt_fill, _qn("a", "bgClr"))

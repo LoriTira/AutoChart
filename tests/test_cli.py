@@ -432,13 +432,19 @@ class TestEndToEnd:
             "--data-source", "DATA SOURCE: Test",
         ])
 
-        assert Path(output_path).exists()
-        assert Path(output_path).stat().st_size > 0
+        # New builder produces one file per (disease, chart type)
+        # Check that at least one output file was generated
+        parent = Path(output_path).parent
+        base = Path(output_path).stem
+        generated = list(parent.glob(f"{base}_*.xlsx"))
+        assert len(generated) > 0, f"No output files found matching {base}_*.xlsx"
 
-        # Verify it's a valid xlsx
-        wb = openpyxl.load_workbook(output_path)
-        assert len(wb.sheetnames) > 0
-        wb.close()
+        # Verify each is a valid xlsx
+        for fpath in generated:
+            assert fpath.stat().st_size > 0
+            wb = openpyxl.load_workbook(str(fpath))
+            assert len(wb.sheetnames) > 0
+            wb.close()
 
         # Check stdout
         captured = capsys.readouterr()
@@ -458,7 +464,11 @@ class TestEndToEnd:
             "--charts", "a",
         ])
 
-        assert Path(output_path).exists()
+        # Check that at least one output file was generated
+        parent = Path(output_path).parent
+        base = Path(output_path).stem
+        generated = list(parent.glob(f"{base}_*.xlsx"))
+        assert len(generated) > 0
         captured = capsys.readouterr()
         assert "Race vs Rest of City" in captured.out
 
@@ -576,7 +586,11 @@ class TestEndToEnd:
             "--data-source", "DATA SOURCE: Test",
         ])
 
-        assert Path(output_path).exists()
+        # New builder produces one file per chart type
+        parent = Path(output_path).parent
+        base = Path(output_path).stem
+        generated = list(parent.glob(f"{base}_*.xlsx"))
+        assert len(generated) > 0
         captured = capsys.readouterr()
         assert "Generation complete" in captured.out
         assert "Cancer Mortality" in captured.out

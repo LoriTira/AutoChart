@@ -1,0 +1,92 @@
+{
+  "id": "race_vs_rest",
+  "name": "Race vs Rest of City",
+  "description": "Compares each racial/ethnic group's rate to the rest of the city, broken down by overall population, female, and male. Produces one chart per race group (typically 3).",
+  "chart_set_type": "A",
+  "input_format": "pivoted_race_vs_other",
+  "sheet_name": "OUTPUT-1",
+  "blocks": [
+    {
+      "index": 0,
+      "race_cells": ["B4", "E4", "H4"],
+      "data_cells": ["B5", "C5", "D5", "E5", "F5", "G5", "H5", "I5", "J5"],
+      "label_cell": "A5",
+      "title_cell": "A8",
+      "chart_index": 1,
+      "pattern_fill_points": [],
+      "color_overrides": {
+        "0": "#92D050", "1": "#0070C0", "2": "#0E2841",
+        "3": "#92D050", "4": "#0070C0", "5": "#0E2841",
+        "6": "#92D050", "7": "#0070C0", "8": "#0E2841"
+      },
+      "text_boxes": {
+        "description": {
+          "from_col": 5, "from_row": 10, "to_col": 8, "to_row": 22
+        },
+        "footnote": {
+          "from_col": 0, "from_row": 26, "to_col": 4, "to_row": 30
+        },
+        "chart": {
+          "from_col": 0, "from_row": 8, "to_col": 5, "to_row": 25
+        }
+      }
+    },
+    {
+      "index": 1,
+      "race_cells": ["B34", "E34", "H34"],
+      "data_cells": ["B35", "C35", "D35", "E35", "F35", "G35", "H35", "I35", "J35"],
+      "label_cell": "A35",
+      "title_cell": "A37",
+      "chart_index": 2,
+      "pattern_fill_points": [],
+      "color_overrides": {
+        "0": "#92D050", "1": "#0070C0", "2": "#0E2841",
+        "3": "#92D050", "4": "#0070C0", "5": "#0E2841",
+        "6": "#92D050", "7": "#0070C0", "8": "#0E2841"
+      },
+      "text_boxes": {
+        "description": {
+          "from_col": 5, "from_row": 38, "to_col": 8, "to_row": 53
+        },
+        "footnote": {
+          "from_col": 0, "from_row": 54, "to_col": 5, "to_row": 58
+        },
+        "chart": {
+          "from_col": 0, "from_row": 37, "to_col": 5, "to_row": 54
+        }
+      }
+    },
+    {
+      "index": 2,
+      "race_cells": ["B62", "E62", "H62"],
+      "data_cells": ["B63", "C63", "D63", "E63", "F63", "G63", "H63", "I63", "J63"],
+      "label_cell": "A63",
+      "title_cell": "A65",
+      "chart_index": 3,
+      "pattern_fill_points": [],
+      "color_overrides": {
+        "0": "#92D050", "1": "#0070C0", "2": "#0E2841",
+        "3": "#92D050", "4": "#0070C0", "5": "#0E2841",
+        "6": "#92D050", "7": "#0070C0", "8": "#0E2841"
+      },
+      "text_boxes": {
+        "description": {
+          "from_col": 5, "from_row": 65, "to_col": 7, "to_row": 80
+        },
+        "footnote": {
+          "from_col": 0, "from_row": 83, "to_col": 4, "to_row": 86
+        },
+        "chart": {
+          "from_col": 0, "from_row": 65, "to_col": 4, "to_row": 82
+        }
+      }
+    }
+  ],
+  "text_patterns": {
+    "title": "{disease}\u2020 for {race} Residents, {years}",
+    "label": "All {disease}",
+    "description": "For the combined years {years}, the age-adjusted overall {disease_lower} rate for {race} residents of {geography} ({rate}) was {comparison} in comparison to the rate for the rest of {geography} ({ref_rate}). The age-adjusted overall {disease_lower} rate for female {race} residents of {geography} ({f_rate}) was {f_comparison} in comparison to the rate for the rest of female {geography} residents ({f_ref_rate}).",
+    "description_with_male": "The age-adjusted overall {disease_lower} rate for male {race} residents of {geography} ({m_rate}) was {m_comparison} in comparison to the rate for the rest of male {geography} residents ({m_ref_rate}).",
+    "footnote": "\u2020 Age-adjusted rates {rate_unit}\n* Statistically significant difference when compared to reference group\nDATA SOURCE: {data_source}"
+  }
+}

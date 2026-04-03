@@ -1,0 +1,72 @@
+{
+  "id": "race_vs_reference",
+  "name": "Race vs Reference Group",
+  "description": "Compares each racial/ethnic group's rate to the reference group (typically White residents), with one chart per race.",
+  "chart_set_type": "B",
+  "input_format": "sas_race_vs_white",
+  "sheet_name": "OUTPUT-6",
+  "blocks": [
+    {
+      "index": 0,
+      "race_cell": "B5",
+      "data_cells": ["B6", "C6", "D6"],
+      "title_cell": "A8",
+      "chart_index": 1,
+      "pattern_fill_points": [1],
+      "text_boxes": {
+        "description": {
+          "from_col": 7, "from_row": 12, "to_col": 9, "to_row": 19
+        },
+        "footnote": {
+          "from_col": 0, "from_row": 23, "to_col": 6, "to_row": 28
+        },
+        "chart": {
+          "from_col": 0, "from_row": 8, "to_col": 6, "to_row": 23
+        }
+      }
+    },
+    {
+      "index": 1,
+      "race_cell": "B30",
+      "data_cells": ["B31", "C31", "D31"],
+      "title_cell": "A33",
+      "chart_index": 2,
+      "pattern_fill_points": [1],
+      "text_boxes": {
+        "description": {
+          "from_col": 6, "from_row": 35, "to_col": 9, "to_row": 42
+        },
+        "footnote": {
+          "from_col": 0, "from_row": 48, "to_col": 6, "to_row": 53
+        },
+        "chart": {
+          "from_col": 0, "from_row": 33, "to_col": 6, "to_row": 47
+        }
+      }
+    },
+    {
+      "index": 2,
+      "race_cell": "B55",
+      "data_cells": ["B56", "C56", "D56"],
+      "title_cell": "A57",
+      "chart_index": 3,
+      "pattern_fill_points": [1],
+      "text_boxes": {
+        "description": {
+          "from_col": 7, "from_row": 58, "to_col": 10, "to_row": 65
+        },
+        "footnote": {
+          "from_col": 0, "from_row": 72, "to_col": 6, "to_row": 76
+        },
+        "chart": {
+          "from_col": 0, "from_row": 57, "to_col": 6, "to_row": 72
+        }
+      }
+    }
+  ],
+  "text_patterns": {
+    "title": "{disease}\u2020, {race} Residents Compared to {reference} Residents, {years}",
+    "description": "For the years {years}, the age-adjusted overall {disease_lower} rate for {race} residents ({rate}) was {comparison} in comparison to the rate for {reference_lower} residents ({ref_rate}).",
+    "footnote": "\u2020 Age-adjusted rates {rate_unit}\n* Statistically significant difference when compared to reference group\nDATA SOURCE: {data_source}"
+  }
+}

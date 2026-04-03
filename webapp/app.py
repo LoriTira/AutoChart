@@ -5,24 +5,140 @@ Run with::
 """
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
+# Ensure src/ is on the path when running via `streamlit run webapp/app.py`
+_SRC = str(Path(__file__).resolve().parent.parent / "src")
+if _SRC not in sys.path:
+    sys.path.insert(0, _SRC)
+
 import io
 import tempfile
+import zipfile
 from pathlib import Path
 
 import streamlit as st
 
 from autochart.config import ChartConfig, ChartSetType, ColorScheme, SheetResult
-from autochart.extractor import ExtractedConfig, extract_config_per_sheet, build_config
-from autochart.parser import parse_workbook, get_all_data_by_type, auto_parse_multi
-from autochart.templates import get_all_templates, get_templates_for_data, get_template_by_type
-from autochart.builder.workbook import WorkbookBuilder
-from autochart.builder.postprocess import postprocess_xlsx
-from autochart.cli import _compute_chart_patches, _compute_chart_patches_multi
+from autochart.extractor import ExtractedConfig, extract_config_per_sheet
+from autochart.parser import auto_parse_multi
+from autochart.template_packages.loader import (
+    get_available_templates,
+    get_template,
+    get_template_by_type,
+    TemplatePackage,
+)
+from autochart.builder.template_builder import TemplateBuilder, TableAssignment
+
 
 st.set_page_config(page_title="AutoChart", page_icon="\U0001f4ca", layout="wide")
 
 st.title("AutoChart")
 st.caption("Public health chart generator \u2014 upload data, pick templates, download charts")
+
+
+# ---------------------------------------------------------------------------
+# SVG previews (inline, from old templates.py)
+# ---------------------------------------------------------------------------
+
+_STRIPE = (
+    '<defs><pattern id="stripes" patternUnits="userSpaceOnUse" '
+    'width="6" height="6" patternTransform="rotate(45)">'
+    '<rect width="6" height="6" fill="#0E2841"/>'
+    '<line x1="0" y1="0" x2="0" y2="6" stroke="#FFFFFF" stroke-width="1.5"/>'
+    '</pattern></defs>'
+)
+
+_SVG_PREVIEWS: dict[str, str] = {
+    "race_vs_rest": (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120">'
+        f'{_STRIPE}'
+        '<rect width="200" height="120" rx="8" fill="#F8F9FA" stroke="#DEE2E6" stroke-width="1"/>'
+        '<line x1="20" y1="95" x2="185" y2="95" stroke="#ADB5BD" stroke-width="0.75"/>'
+        '<rect x="28" y="40" width="10" height="55" fill="#92D050" rx="1"/>'
+        '<rect x="40" y="50" width="10" height="45" fill="#0070C0" rx="1"/>'
+        '<rect x="52" y="55" width="10" height="40" fill="#0E2841" rx="1"/>'
+        '<rect x="78" y="35" width="10" height="60" fill="#92D050" rx="1"/>'
+        '<rect x="90" y="55" width="10" height="40" fill="#0070C0" rx="1"/>'
+        '<rect x="102" y="45" width="10" height="50" fill="#0E2841" rx="1"/>'
+        '<rect x="128" y="30" width="10" height="65" fill="#92D050" rx="1"/>'
+        '<rect x="140" y="48" width="10" height="47" fill="#0070C0" rx="1"/>'
+        '<rect x="152" y="42" width="10" height="53" fill="#0E2841" rx="1"/>'
+        '<text x="46" y="110" text-anchor="middle" font-family="Arial" font-size="7" fill="#495057">Overall</text>'
+        '<text x="96" y="110" text-anchor="middle" font-family="Arial" font-size="7" fill="#495057">Female</text>'
+        '<text x="146" y="110" text-anchor="middle" font-family="Arial" font-size="7" fill="#495057">Male</text>'
+        '</svg>'
+    ),
+    "race_vs_reference": (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120">'
+        f'{_STRIPE}'
+        '<rect width="200" height="120" rx="8" fill="#F8F9FA" stroke="#DEE2E6" stroke-width="1"/>'
+        '<line x1="20" y1="95" x2="185" y2="95" stroke="#ADB5BD" stroke-width="0.75"/>'
+        '<rect x="40" y="35" width="28" height="60" fill="#0E2841" rx="1"/>'
+        '<rect x="86" y="45" width="28" height="50" fill="url(#stripes)" rx="1"/>'
+        '<rect x="86" y="45" width="28" height="50" fill="none" stroke="#0E2841" stroke-width="0.5" rx="1"/>'
+        '<rect x="132" y="50" width="28" height="45" fill="#0E2841" rx="1"/>'
+        '<text x="54" y="110" text-anchor="middle" font-family="Arial" font-size="7" fill="#495057">Race</text>'
+        '<text x="100" y="110" text-anchor="middle" font-family="Arial" font-size="7" fill="#495057">White</text>'
+        '<text x="146" y="110" text-anchor="middle" font-family="Arial" font-size="7" fill="#495057">Overall</text>'
+        '</svg>'
+    ),
+    "combined_comparison": (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120">'
+        f'{_STRIPE}'
+        '<rect width="200" height="120" rx="8" fill="#F8F9FA" stroke="#DEE2E6" stroke-width="1"/>'
+        '<line x1="15" y1="95" x2="190" y2="95" stroke="#ADB5BD" stroke-width="0.75"/>'
+        '<rect x="22" y="38" width="22" height="57" fill="#0E2841" rx="1"/>'
+        '<rect x="52" y="30" width="22" height="65" fill="#0E2841" rx="1"/>'
+        '<rect x="82" y="42" width="22" height="53" fill="#0E2841" rx="1"/>'
+        '<rect x="112" y="48" width="22" height="47" fill="url(#stripes)" rx="1"/>'
+        '<rect x="112" y="48" width="22" height="47" fill="none" stroke="#0E2841" stroke-width="0.5" rx="1"/>'
+        '<rect x="142" y="44" width="22" height="51" fill="#0E2841" rx="1"/>'
+        '<text x="33" y="108" text-anchor="middle" font-family="Arial" font-size="6" fill="#495057">Asian</text>'
+        '<text x="63" y="108" text-anchor="middle" font-family="Arial" font-size="6" fill="#495057">Black</text>'
+        '<text x="93" y="108" text-anchor="middle" font-family="Arial" font-size="6" fill="#495057">Latinx</text>'
+        '<text x="123" y="108" text-anchor="middle" font-family="Arial" font-size="6" fill="#495057">White</text>'
+        '<text x="153" y="108" text-anchor="middle" font-family="Arial" font-size="6" fill="#495057">Overall</text>'
+        '</svg>'
+    ),
+    "gender_race_stratified": (
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120">'
+        f'{_STRIPE}'
+        '<rect width="200" height="120" rx="8" fill="#F8F9FA" stroke="#DEE2E6" stroke-width="1"/>'
+        '<line x1="10" y1="95" x2="195" y2="95" stroke="#ADB5BD" stroke-width="0.75"/>'
+        '<rect x="14" y="40" width="12" height="55" fill="#0E2841" rx="1"/>'
+        '<rect x="28" y="32" width="12" height="63" fill="#0E2841" rx="1"/>'
+        '<rect x="42" y="44" width="12" height="51" fill="#0E2841" rx="1"/>'
+        '<rect x="56" y="50" width="12" height="45" fill="url(#stripes)" rx="1"/>'
+        '<rect x="56" y="50" width="12" height="45" fill="none" stroke="#0E2841" stroke-width="0.5" rx="1"/>'
+        '<rect x="70" y="46" width="12" height="49" fill="#0E2841" rx="1"/>'
+        '<line x1="90" y1="25" x2="90" y2="95" stroke="#DEE2E6" stroke-width="0.5" stroke-dasharray="3,2"/>'
+        '<rect x="98" y="38" width="12" height="57" fill="#0E2841" rx="1"/>'
+        '<rect x="112" y="28" width="12" height="67" fill="#0E2841" rx="1"/>'
+        '<rect x="126" y="42" width="12" height="53" fill="#0E2841" rx="1"/>'
+        '<rect x="140" y="52" width="12" height="43" fill="url(#stripes)" rx="1"/>'
+        '<rect x="140" y="52" width="12" height="43" fill="none" stroke="#0E2841" stroke-width="0.5" rx="1"/>'
+        '<rect x="154" y="48" width="12" height="47" fill="#0E2841" rx="1"/>'
+        '<text x="49" y="110" text-anchor="middle" font-family="Arial" font-size="8" font-weight="bold" fill="#495057">Female</text>'
+        '<text x="133" y="110" text-anchor="middle" font-family="Arial" font-size="8" font-weight="bold" fill="#495057">Male</text>'
+        '</svg>'
+    ),
+}
+
+
+def _get_preview(template_id: str) -> str:
+    """Get SVG preview for a template, falling back to the package's preview_svg."""
+    if template_id in _SVG_PREVIEWS:
+        return _SVG_PREVIEWS[template_id]
+    try:
+        pkg = get_template(template_id)
+        if pkg.preview_svg:
+            return pkg.preview_svg
+    except KeyError:
+        pass
+    return ""
+
 
 # --- File Upload ---
 uploaded_file = st.file_uploader("Upload input Excel file", type=["xlsx"])
@@ -35,7 +151,7 @@ if uploaded_file is not None:
         st.session_state.uploaded_bytes = uploaded_file.getvalue()
         st.session_state.per_sheet_extracted = None
         st.session_state.sheet_results = None
-        st.session_state.output_bytes = None
+        st.session_state.output_results = None
 
     # Auto-extract config per sheet on first load
     if st.session_state.per_sheet_extracted is None:
@@ -56,27 +172,37 @@ if uploaded_file is not None:
     if not per_sheet_extracted:
         st.warning("No INPUT sheets found in the workbook.")
     else:
-        # --- Sidebar: Per-sheet configuration ---
+        # --- Sidebar: Per-disease configuration ---
         st.sidebar.header("Configuration")
 
-        # Group sheets by detected disease for cleaner display
         disease_groups: dict[str, list[str]] = {}
         for sheet_name, extracted in per_sheet_extracted.items():
             key = extracted.disease_name or "Unknown"
             disease_groups.setdefault(key, []).append(sheet_name)
 
-        # Per-disease config editors
         sheet_configs: dict[str, dict] = {}
 
         for disease_label, sheet_names in disease_groups.items():
-            # Use first sheet's extraction as representative
+            # Merge best values across all sheets in this disease group
+            # (e.g. INPUT-1 may lack years/source that INPUT-2 has)
             rep_extracted = per_sheet_extracted[sheet_names[0]]
+            for sn in sheet_names[1:]:
+                other = per_sheet_extracted[sn]
+                if not rep_extracted.years and other.years:
+                    rep_extracted.years = other.years
+                    rep_extracted.confidence["years"] = other.confidence.get("years", 0)
+                if not rep_extracted.data_source and other.data_source:
+                    rep_extracted.data_source = other.data_source
+                    rep_extracted.confidence["data_source"] = other.confidence.get("data_source", 0)
+                if not rep_extracted.rate_unit and other.rate_unit:
+                    rep_extracted.rate_unit = other.rate_unit
+                    rep_extracted.rate_denominator = other.rate_denominator
+                    rep_extracted.confidence["rate_unit"] = other.confidence.get("rate_unit", 0)
 
             with st.sidebar.expander(
                 f"{disease_label} ({len(sheet_names)} sheet(s))", expanded=True
             ):
                 st.caption(f"Sheets: {', '.join(sheet_names)}")
-
                 prefix = disease_label.replace(" ", "_").lower()
 
                 disease_name = st.text_input(
@@ -84,36 +210,28 @@ if uploaded_file is not None:
                     + (" \u2705" if rep_extracted.confidence.get("disease_name", 0) >= 0.8 else ""),
                     value=rep_extracted.disease_name or "",
                     key=f"{prefix}_disease",
-                    placeholder="e.g. Cancer Mortality",
                 )
                 years = st.text_input(
                     "Years"
                     + (" \u2705" if rep_extracted.confidence.get("years", 0) >= 0.8 else ""),
                     value=rep_extracted.years or "",
                     key=f"{prefix}_years",
-                    placeholder="e.g. 2017-2023",
                 )
 
-                rate_denom = rep_extracted.rate_denominator or 100000
                 rate_unit_options = ["per 100,000 residents", "per 10,000 residents"]
                 auto_rate_unit = rep_extracted.rate_unit or "per 100,000 residents"
-                default_idx = 0
-                if auto_rate_unit in rate_unit_options:
-                    default_idx = rate_unit_options.index(auto_rate_unit)
-                rate_badge = " \u2705" if rep_extracted.rate_unit and rep_extracted.confidence.get("rate_unit", 0) >= 0.8 else ""
+                default_idx = rate_unit_options.index(auto_rate_unit) if auto_rate_unit in rate_unit_options else 0
                 rate_unit = st.selectbox(
-                    f"Rate unit{rate_badge}", rate_unit_options,
-                    index=default_idx, key=f"{prefix}_rate",
+                    "Rate unit", rate_unit_options, index=default_idx, key=f"{prefix}_rate",
                 )
                 _denom_map = {"per 100,000 residents": 100000, "per 10,000 residents": 10000}
-                rate_denominator = _denom_map.get(rate_unit, rate_denom)
+                rate_denominator = _denom_map.get(rate_unit, 100000)
 
+                _default_source = "DATA SOURCE: Boston resident deaths, Massachusetts Department of Public Health"
                 data_source = st.text_area(
-                    "Data source"
-                    + (" \u2705" if rep_extracted.confidence.get("data_source", 0) >= 0.8 else ""),
-                    value=rep_extracted.data_source or "",
+                    "Data source",
+                    value=rep_extracted.data_source or _default_source,
                     key=f"{prefix}_source",
-                    placeholder="e.g. DATA SOURCE: ...",
                 )
                 geography = st.text_input(
                     "Geography",
@@ -131,7 +249,6 @@ if uploaded_file is not None:
                     key=f"{prefix}_ref",
                 )
 
-                # Store config for all sheets in this group
                 for sn in sheet_names:
                     sheet_configs[sn] = {
                         "disease_name": disease_name,
@@ -147,17 +264,13 @@ if uploaded_file is not None:
         # Advanced settings
         st.sidebar.divider()
         st.sidebar.subheader("Advanced")
-        col_featured = st.sidebar.color_picker("Featured race color", value="#92D050")
-        col_rest = st.sidebar.color_picker("Rest of city color", value="#0070C0")
-        col_overall = st.sidebar.color_picker("Overall color", value="#0E2841")
         significance_threshold = st.sidebar.number_input(
             "Significance threshold", min_value=0.001, max_value=1.0, value=0.05, step=0.01, format="%.3f"
         )
-
         st.sidebar.divider()
         st.sidebar.caption("\u2705 = Auto-detected (high confidence)")
 
-        # --- Parse workbook per-sheet ---
+        # --- Parse workbook ---
         if st.session_state.sheet_results is None:
             tmp_path = st.session_state.get("tmp_path")
             if tmp_path and Path(tmp_path).exists():
@@ -176,12 +289,9 @@ if uploaded_file is not None:
             parsed_names = [sr.sheet_name for sr in sheet_results]
             st.success(f"Found {len(parsed_names)} input sheet(s): {', '.join(parsed_names)}")
 
-        # --- Detected Tables ---
-        st.subheader("Detected Tables")
-
-        from autochart.builder.template_builder import (
-            TEMPLATE_FOR_TYPE, TableAssignment,
-        )
+        # --- Detected Tables with Template Selection ---
+        st.subheader("Detected Tables & Template Selection")
+        st.caption("Choose which chart template to use for each detected table. Uncheck to skip.")
 
         # Aggregate tables by (disease, chart_type)
         table_entries: list[dict] = []
@@ -203,16 +313,67 @@ if uploaded_file is not None:
                             tbl["data"].extend(data_list)
                             break
 
-        for tbl in table_entries:
+        # Get available templates
+        all_templates = get_available_templates()
+        template_options = {pkg.id: f"{pkg.name}" for pkg in all_templates}
+
+        # Per-table template selection
+        table_selections: list[dict] = []
+
+        for i, tbl in enumerate(table_entries):
             ct = tbl["chart_type"]
+            disease = tbl["disease"]
+            default_template_id = None
+
+            # Find the default template for this chart type
+            for pkg in all_templates:
+                if pkg.chart_set_type == ct:
+                    default_template_id = pkg.id
+                    break
+
             with st.container(border=True):
-                st.markdown(f"**{tbl['disease']}** — {ct.label}")
-                st.caption(f"{len(tbl['data'])} data item(s)")
+                cols = st.columns([0.05, 0.3, 0.35, 0.3])
+
+                with cols[0]:
+                    enabled = st.checkbox(
+                        "Enable",
+                        value=True,
+                        key=f"enable_{i}",
+                        label_visibility="collapsed",
+                    )
+
+                with cols[1]:
+                    st.markdown(f"**{disease}**")
+                    st.caption(f"{ct.label} \u2022 {len(tbl['data'])} item(s)")
+
+                with cols[2]:
+                    # Template selector
+                    template_ids = list(template_options.keys())
+                    default_idx = template_ids.index(default_template_id) if default_template_id in template_ids else 0
+                    selected_id = st.selectbox(
+                        "Template",
+                        options=template_ids,
+                        format_func=lambda x: template_options[x],
+                        index=default_idx,
+                        key=f"template_{i}",
+                        label_visibility="collapsed",
+                    )
+
+                with cols[3]:
+                    # SVG preview
+                    svg = _get_preview(selected_id)
+                    if svg:
+                        st.markdown(svg, unsafe_allow_html=True)
+
+                if enabled:
+                    table_selections.append({
+                        "table": tbl,
+                        "template_id": selected_id,
+                    })
 
         # --- Generate ---
         st.divider()
 
-        # Check required fields
         missing_fields = []
         for disease_label, sheet_names in disease_groups.items():
             cfg = sheet_configs.get(sheet_names[0], {})
@@ -221,64 +382,68 @@ if uploaded_file is not None:
             if not cfg.get("years"):
                 missing_fields.append(f"{disease_label}: years")
 
-        can_generate = bool(table_entries) and bool(sheet_results) and not missing_fields
+        can_generate = bool(table_selections) and not missing_fields
 
         for mf in missing_fields:
             st.warning(f"Missing: {mf}. Please enter it in the sidebar.")
 
         generate_clicked = st.button(
-            "Generate Charts", disabled=not can_generate,
-            type="primary", use_container_width=True,
+            "Generate Charts",
+            disabled=not can_generate,
+            type="primary",
+            use_container_width=True,
         )
 
         if generate_clicked and can_generate:
-            st.session_state.output_bytes = None
-
-            from autochart.builder.template_builder import TemplateBuilder
-
-            # Group tables by disease
-            disease_tables: dict[str, dict] = {}
-            for tbl in table_entries:
-                cfg = tbl["config"]
-                override = sheet_configs.get(
-                    next((sn for sn in per_sheet_extracted
-                          if per_sheet_extracted[sn].disease_name == tbl["disease"]), ""),
-                    {},
-                )
-                if override:
-                    cfg = ChartConfig(
-                        disease_name=override.get("disease_name", cfg.disease_name),
-                        rate_unit=override.get("rate_unit", cfg.rate_unit),
-                        rate_denominator=int(override.get("rate_denominator", cfg.rate_denominator)),
-                        data_source=override.get("data_source", cfg.data_source),
-                        years=override.get("years", cfg.years),
-                        demographics=override.get("demographics", cfg.demographics),
-                        reference_group=override.get("reference_group", cfg.reference_group),
-                        geography=override.get("geography", cfg.geography),
-                        significance_threshold=significance_threshold,
-                        colors=ColorScheme(
-                            featured_race=col_featured,
-                            rest_of_boston=col_rest,
-                            boston_overall=col_overall,
-                        ),
-                    )
-
-                d = tbl["disease"]
-                if d not in disease_tables:
-                    disease_tables[d] = {}
-                disease_tables[d][tbl["chart_type"]] = (cfg, tbl["data"])
-
-            progress = st.progress(0, text="Building charts from template...")
+            st.session_state.output_results = None
+            progress = st.progress(0, text="Building charts...")
 
             try:
-                tbuilder = TemplateBuilder()
+                # Build assignments from selections
+                assignments: list[TableAssignment] = []
+                for sel in table_selections:
+                    tbl = sel["table"]
+                    template_id = sel["template_id"]
+
+                    # Build config with overrides
+                    base_config = tbl["config"]
+                    override = sheet_configs.get(
+                        next((sn for sn in per_sheet_extracted
+                              if per_sheet_extracted[sn].disease_name == tbl["disease"]), ""),
+                        {},
+                    )
+                    if override:
+                        config = ChartConfig(
+                            disease_name=override.get("disease_name", base_config.disease_name),
+                            rate_unit=override.get("rate_unit", base_config.rate_unit),
+                            rate_denominator=int(override.get("rate_denominator", base_config.rate_denominator)),
+                            data_source=override.get("data_source", base_config.data_source),
+                            years=override.get("years", base_config.years),
+                            demographics=override.get("demographics", base_config.demographics),
+                            reference_group=override.get("reference_group", base_config.reference_group),
+                            geography=override.get("geography", base_config.geography),
+                            significance_threshold=significance_threshold,
+                        )
+                    else:
+                        config = base_config
+
+                    assignments.append(TableAssignment(
+                        template_id=template_id,
+                        data_list=tbl["data"],
+                        config=config,
+                    ))
+
                 progress.progress(30, text="Filling templates with data...")
 
-                results = tbuilder.build_multi(disease_tables)
-                st.session_state.output_results = results
-                progress.progress(100, text="Done!")
+                builder = TemplateBuilder()
+                individual = builder.build_from_assignments(assignments)
+                progress.progress(70, text="Combining into single workbook...")
+                combined = builder.build_combined(assignments)
 
-                st.success(f"Generated charts for {len(results)} disease(s)!")
+                progress.progress(100, text="Done!")
+                st.session_state.output_results = individual
+                st.session_state.output_combined = combined
+                st.success(f"Generated {len(individual)} chart(s) in one workbook!")
 
             except Exception as e:
                 st.error(f"Generation failed: {e}")
@@ -286,19 +451,33 @@ if uploaded_file is not None:
                 st.expander("Error details").code(traceback.format_exc())
 
         # --- Download ---
-        if st.session_state.get("output_results") is not None:
-            results = st.session_state.output_results
-            for disease_name, xlsx_bytes in results.items():
-                safe = disease_name.replace(" ", "_").lower()[:30]
-                st.download_button(
-                    f"Download {disease_name}",
-                    data=xlsx_bytes,
-                    file_name=f"autochart_{safe}.xlsx",
-                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    type="primary",
-                    use_container_width=True,
-                    key=f"dl_{safe}",
-                )
+        if st.session_state.get("output_combined"):
+            st.subheader("Download")
+
+            # Combined workbook (primary)
+            st.download_button(
+                "Download Combined Workbook",
+                data=st.session_state.output_combined,
+                file_name="autochart_output.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                type="primary",
+                use_container_width=True,
+            )
+
+            # Individual sheets (expandable)
+            results = st.session_state.get("output_results", {})
+            if len(results) > 1:
+                with st.expander("Download individual chart files"):
+                    for idx, (label, xlsx_bytes) in enumerate(results.items()):
+                        safe = label.replace(" ", "_").lower()[:40]
+                        st.download_button(
+                            f"{label}",
+                            data=xlsx_bytes,
+                            file_name=f"autochart_{safe}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            use_container_width=True,
+                            key=f"dl_{idx}",
+                        )
 
 else:
-    st.info("Upload an Excel file to get started. Configuration will be auto-detected from each sheet independently.")
+    st.info("Upload an Excel file to get started. Configuration will be auto-detected from each sheet.")

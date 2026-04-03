@@ -49,6 +49,11 @@ class ChartConfig:
     significance_threshold: float = 0.05
     geography: str = "Boston"
 
+    DEFAULT_DATA_SOURCE: str = field(
+        init=False, repr=False,
+        default="DATA SOURCE: Boston resident deaths, Massachusetts Department of Public Health",
+    )
+
 
 @dataclass
 class RateComparison:

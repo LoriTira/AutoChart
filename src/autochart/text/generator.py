@@ -22,6 +22,10 @@ def _fmt_rate(rate: float) -> str:
 def _comparison_word(comp: RateComparison, threshold: float) -> str:
     """Determine comparison word using the config's significance threshold.
 
+    When a p-value is available, use statistical significance to determine
+    the word. When no p-value is available (e.g. Set A pivoted data),
+    fall back to raw rate direction.
+
     Args:
         comp: The rate comparison to evaluate.
         threshold: Significance threshold (e.g. 0.05).
@@ -29,13 +33,22 @@ def _comparison_word(comp: RateComparison, threshold: float) -> str:
     Returns:
         'higher', 'lower', or 'similar'.
     """
-    if comp.p_value is not None and comp.p_value < threshold:
-        if comp.group_rate > comp.reference_rate:
-            return "higher"
-        elif comp.group_rate < comp.reference_rate:
-            return "lower"
-        else:
-            return "similar"
+    if comp.p_value is not None:
+        # Have statistical test — use significance
+        if comp.p_value < threshold:
+            if comp.group_rate > comp.reference_rate:
+                return "higher"
+            elif comp.group_rate < comp.reference_rate:
+                return "lower"
+            else:
+                return "similar"
+        return "similar"
+
+    # No p-value available — use raw rate direction
+    if comp.group_rate > comp.reference_rate:
+        return "higher"
+    elif comp.group_rate < comp.reference_rate:
+        return "lower"
     return "similar"
 
 

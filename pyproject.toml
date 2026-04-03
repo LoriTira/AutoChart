@@ -25,7 +25,12 @@ autochart = "autochart.cli:main"
 where = ["src"]
 
 [tool.setuptools.package-data]
-autochart = ["templates/*.xlsx"]
+autochart = [
+    "templates/*.xlsx",
+    "template_packages/**/template.xlsx",
+    "template_packages/**/manifest.json",
+    "template_packages/**/preview.svg",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

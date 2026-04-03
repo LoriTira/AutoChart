@@ -119,7 +119,7 @@ def extract_config(
     for sheet_name in input_sheets:
         ws = wb[sheet_name]
 
-        for row_num, text in _cell_texts(ws, max_row=15):
+        for row_num, text in _cell_texts(ws, max_row=25):
             # Normalise non-breaking spaces for all matching
             text_clean = text.replace("\xa0", " ")
 
@@ -274,7 +274,8 @@ def build_config(
         or extracted.rate_unit
         or f"per {rate_denominator:,} residents"
     )
-    data_source = overrides.get("data_source") or extracted.data_source or ""
+    _default_source = "DATA SOURCE: Boston resident deaths, Massachusetts Department of Public Health"
+    data_source = overrides.get("data_source") or extracted.data_source or _default_source
     geography = overrides.get("geography") or extracted.geography or "Boston"
     demographics = (
         overrides.get("demographics")
