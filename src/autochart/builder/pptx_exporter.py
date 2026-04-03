@@ -64,8 +64,9 @@ _CHART_W = Emu(6400000)
 _CHART_H = Emu(3900000)
 
 _TABLE_LEFT = Emu(410564)
-_TABLE_TOP = Emu(6100000)
+_TABLE_TOP = Emu(5950000)
 _TABLE_H = Emu(600000)
+_SLIDE_BOTTOM = Emu(6700000)  # leave margin above the gold bar at 6858000
 
 _COMMENT_LEFT = Emu(7266547)
 _COMMENT_TOP = Emu(2315431)
@@ -158,11 +159,15 @@ def _add_data_table(slide, left, top, width, categories, series_list, series_col
     rows = len(series_list) + 1  # header + data
     cols = 1 + len(categories)
 
-    row_h = Emu(230000)
-    table_shape = slide.shapes.add_table(rows, cols, left, top, width, row_h * rows)
+    # Compute row height so the table fits above the slide bottom
+    max_table_h = _SLIDE_BOTTOM - top
+    row_h = min(Emu(220000), max_table_h // rows)
+    table_h = row_h * rows
+
+    table_shape = slide.shapes.add_table(rows, cols, left, top, width, table_h)
     table = table_shape.table
 
-    # Disable built-in banding/styling
+    # Disable built-in banding/styling (removes default blue/purple theme)
     tbl = table._tbl
     tblPr = tbl.tblPr
     if tblPr is None:
@@ -171,9 +176,15 @@ def _add_data_table(slide, left, top, width, categories, series_list, series_col
     tblPr.set('bandCol', '0')
     tblPr.set('firstRow', '0')
     tblPr.set('lastRow', '0')
+    # Remove any tblStyle that forces theme colors
+    for style_el in tblPr.findall(qn('a:tblStyle')):
+        tblPr.remove(style_el)
+    # Clear the tblStyle attribute if present
+    if tblPr.get('tblStyle'):
+        del tblPr.attrib['tblStyle']
 
     def _style_cell(cell, text, font_sz=Pt(8), bold=False, align=PP_ALIGN.CENTER,
-                    fill_color=None, font_color=_BLACK):
+                    font_color=_BLACK):
         cell.text = text
         for p in cell.text_frame.paragraphs:
             p.font.name = "Montserrat"
@@ -182,38 +193,33 @@ def _add_data_table(slide, left, top, width, categories, series_list, series_col
             p.font.color.rgb = font_color
             p.alignment = align
         cell.vertical_anchor = MSO_ANCHOR.MIDDLE
-        # Cell fill
+        # White background
         tcPr = cell._tc.get_or_add_tcPr()
-        if fill_color:
-            solidFill = etree.SubElement(tcPr, qn('a:solidFill'))
-            etree.SubElement(solidFill, qn('a:srgbClr'), val=fill_color)
-        else:
-            etree.SubElement(tcPr, qn('a:noFill'))
-        # Thin borders
+        # Remove any existing fills
+        for existing in tcPr.findall(qn('a:solidFill')):
+            tcPr.remove(existing)
+        for existing in tcPr.findall(qn('a:noFill')):
+            tcPr.remove(existing)
+        solidFill = etree.SubElement(tcPr, qn('a:solidFill'))
+        etree.SubElement(solidFill, qn('a:srgbClr'), val='FFFFFF')
+        # Thin gray borders
         for border_name in ['a:lnL', 'a:lnR', 'a:lnT', 'a:lnB']:
+            for existing in tcPr.findall(qn(border_name)):
+                tcPr.remove(existing)
             ln = etree.SubElement(tcPr, qn(border_name), w='6350')
-            solidFill = etree.SubElement(ln, qn('a:solidFill'))
-            etree.SubElement(solidFill, qn('a:srgbClr'), val='D9D9D9')
+            lnFill = etree.SubElement(ln, qn('a:solidFill'))
+            etree.SubElement(lnFill, qn('a:srgbClr'), val='D9D9D9')
 
     # Header row
     _style_cell(table.cell(0, 0), "", bold=True, align=PP_ALIGN.LEFT)
     for j, cat in enumerate(categories):
         _style_cell(table.cell(0, j + 1), cat, bold=True)
 
-    # Data rows with colored legend indicator
+    # Data rows
     for i, s in enumerate(series_list):
-        color_hex = None
-        if i < len(series_colors):
-            c = series_colors[i]
-            color_hex = f"{c[0]:02X}{c[1]:02X}{c[2]:02X}" if c else None
-
-        # First cell: series name with color indicator
-        label = f"\u25A0 {s.name}" if color_hex else s.name
-        _style_cell(table.cell(i + 1, 0), label, bold=True, align=PP_ALIGN.LEFT)
-
+        _style_cell(table.cell(i + 1, 0), s.name, bold=True, align=PP_ALIGN.LEFT)
         for j, val in enumerate(s.values):
-            formatted = f"{val:.1f}" if val != int(val) else f"{val:.1f}"
-            _style_cell(table.cell(i + 1, j + 1), formatted)
+            _style_cell(table.cell(i + 1, j + 1), f"{val:.1f}")
 
     return table_shape
 
