@@ -8,7 +8,7 @@ Built for BPHC (Boston Public Health Commission) analysts who need to batch-gene
 
 ```bash
 # Install dependencies
-pip install openpyxl streamlit
+pip install openpyxl streamlit python-pptx
 
 # Web UI (recommended for non-technical users)
 streamlit run webapp/app.py
@@ -40,6 +40,13 @@ Each chart includes:
 - Floating text box with descriptive paragraph (higher/lower/similar comparison)
 - Floating text box with footnotes (dagger, asterisk, data source)
 
+4. **Exports to PowerPoint** — one BPHC-branded slide per chart with:
+   - Editable native PowerPoint bar chart (matching Excel colors, patterns, gridlines)
+   - Data table with white background and clean borders
+   - Y-axis title ("Rate per 100,000 Residents")
+   - "Insert title here" / "Insert comment here" placeholders for analysts
+   - Footnotes with dagger/asterisk/source
+
 ---
 
 ## Architecture
@@ -56,17 +63,22 @@ Input .xlsx
     v
  Data Models --- ChartSetAData, ChartSetBData, ChartSetCData, Part3Data
     |
-    v
- TemplateBuilder (manifest-driven)
-    |--- 1. Opens template .xlsx (pre-designed charts + formatting)
-    |--- 2. Fills data cells (charts auto-update from cell references)
-    |--- 3. OOXML post-process (Montserrat font, pattern fills, asterisks)
-    |--- 4. Injects floating text boxes (descriptions + footnotes)
+    +---> TemplateBuilder (manifest-driven)
+    |        |--- 1. Opens template .xlsx (pre-designed charts + formatting)
+    |        |--- 2. Fills data cells (charts auto-update from cell references)
+    |        |--- 3. OOXML post-process (Montserrat font, pattern fills, asterisks)
+    |        |--- 4. Injects floating text boxes (descriptions + footnotes)
+    |        v
+    |     Combiner ------ merges into one multi-sheet workbook
+    |        v
+    |     Output .xlsx
     |
-    v
- Combiner ------ merges per-chart-type .xlsx files into one multi-sheet workbook
-    |
-    v
+    +---> PPTX Exporter
+             |--- Uses BPHC-branded .pptx template (slide master/theme)
+             |--- Creates native editable PowerPoint charts per slide
+             |--- Adds data tables, footnotes, title/comment placeholders
+             v
+          Output .pptx
  Output .xlsx (one sheet per chart type, all charts + text boxes)
 ```
 
@@ -162,15 +174,16 @@ AutoChart/
 │   │   └── generator.py                    # TextGenerator: descriptive text, footnotes, titles
 │   │
 │   └── builder/
-│       ├── template_builder.py             # ** CORE: Manifest-driven pipeline **
+│       ├── template_builder.py             # CORE: Manifest-driven Excel pipeline
 │       ├── postprocess.py                  # OOXML post-processor (fonts, fills, asterisks)
-│       ├── textbox_updater.py              # ** NEW: Text box shape injection **
-│       ├── combiner.py                     # ** NEW: Multi-sheet workbook merger **
+│       ├── textbox_updater.py              # Text box shape injection via OOXML
+│       ├── combiner.py                     # Multi-sheet workbook merger at ZIP level
+│       ├── pptx_exporter.py               # PowerPoint export with native editable charts
 │       ├── workbook.py                     # Legacy WorkbookBuilder
 │       └── injector.py                     # Legacy ZIP-level chart injection
 │
 ├── webapp/
-│   └── app.py                              # Streamlit UI with per-table template selection
+│   └── app.py                              # Streamlit UI: template selection + Excel/PPTX export
 │
 └── tests/                                  # 377 tests
 ```
@@ -183,6 +196,7 @@ AutoChart/
 | `builder/template_builder.py` | Full pipeline: fill cells → postprocess → inject text boxes. `build_combined()` for multi-sheet output |
 | `builder/textbox_updater.py` | Creates OOXML `<xdr:sp>` text box shapes with white fill + border, multi-paragraph rich text |
 | `builder/combiner.py` | Merges multiple single-sheet .xlsx files at ZIP level preserving charts, drawings, and all formatting |
+| `builder/pptx_exporter.py` | Exports to branded BPHC PowerPoint: native editable charts, data tables, footnotes, placeholders |
 
 ---
 
@@ -354,6 +368,7 @@ PYTHONPATH=src python -m autochart.cli generate inputs.xlsx -o output
 | Package | Purpose |
 |---------|---------|
 | openpyxl >= 3.1.0 | Excel workbook read/write, chart creation |
+| python-pptx >= 1.0.0 | PowerPoint generation with native editable charts |
 | streamlit >= 1.30.0 | Web UI |
 | pytest >= 7.0 | Tests (dev) |
 
