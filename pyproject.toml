@@ -10,6 +10,7 @@ requires-python = ">=3.10"
 dependencies = [
     "openpyxl>=3.1.0",
     "streamlit>=1.30.0",
+    "python-pptx>=1.0.0",
 ]
 
 [project.optional-dependencies]
@@ -30,6 +31,7 @@ autochart = [
     "template_packages/**/template.xlsx",
     "template_packages/**/manifest.json",
     "template_packages/**/preview.svg",
+    "template_packages/bphc_template.pptx",
 ]
 
 [tool.pytest.ini_options]

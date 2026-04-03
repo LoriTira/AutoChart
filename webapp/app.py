@@ -464,10 +464,41 @@ if uploaded_file is not None:
                 use_container_width=True,
             )
 
-            # Individual sheets (expandable)
+            # PowerPoint export
+            if st.session_state.get("sheet_results"):
+                export_pptx_clicked = st.button(
+                    "Export to PowerPoint",
+                    use_container_width=True,
+                    key="export_pptx",
+                )
+
+                if export_pptx_clicked:
+                    try:
+                        from autochart.builder.pptx_exporter import export_to_pptx
+                        pptx_bytes = export_to_pptx(st.session_state.sheet_results)
+                        st.session_state.pptx_bytes = pptx_bytes
+                    except Exception as e:
+                        st.error(f"PowerPoint export failed: {e}")
+                        import traceback
+                        st.expander("Error details").code(traceback.format_exc())
+
+                if st.session_state.get("pptx_bytes"):
+                    st.download_button(
+                        "Download PowerPoint",
+                        data=st.session_state.pptx_bytes,
+                        file_name="autochart_output.pptx",
+                        mime="application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                        type="primary",
+                        use_container_width=True,
+                        key="dl_pptx",
+                    )
+
+            st.divider()
+
+            # Individual Excel sheets (expandable)
             results = st.session_state.get("output_results", {})
             if len(results) > 1:
-                with st.expander("Download individual chart files"):
+                with st.expander("Download individual Excel chart files"):
                     for idx, (label, xlsx_bytes) in enumerate(results.items()):
                         safe = label.replace(" ", "_").lower()[:40]
                         st.download_button(

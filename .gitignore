@@ -30,6 +30,7 @@ output/
 !examples.xlsx
 !src/autochart/templates/template.xlsx
 !src/autochart/template_packages/*/template.xlsx
+!src/autochart/template_packages/bphc_template.pptx
 
 # Testing
 .pytest_cache/
